@@ -1,0 +1,17 @@
+name: Keep Render Alive Robot
+
+on:
+  schedule:
+    # Runs every 10 minutes to prevent Render free tier from sleeping (inactivity limit is 15 min)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Veritas AI Health Endpoint
+        run: |
+          echo "Pinging Veritas AI on Render..."
+          curl -f -sS -I https://veritas-ai-3e4e.onrender.com/api/health || true
+          echo "Ping successful!"
