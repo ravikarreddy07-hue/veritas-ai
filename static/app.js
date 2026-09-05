@@ -107,7 +107,7 @@ function setIntensity(intensity) {
     } else if (intensity === 'balanced') {
         descEl.textContent = 'Balanced: removes clichés, injects cadence punches, and drops AI score under 20%.';
     } else {
-        descEl.textContent = 'Stealth (<10%): deep burstiness restructuring, clause splitting, and 100% all-green sentences.';
+        descEl.textContent = 'Stealth (<10%): deep burstiness restructuring, clause splitting, and authentic human cadence.';
     }
 }
 
@@ -279,7 +279,7 @@ async function runHumanizer() {
     const btn = document.getElementById('humanize-btn');
     const btnText = document.getElementById('humanize-btn-text');
     btn.disabled = true;
-    btnText.textContent = 'Generating 100% Green Prose...';
+    btnText.textContent = 'Humanizing Text...';
 
     const useOllama = document.getElementById('use-ollama-check').checked;
     const ollamaModel = document.getElementById('ollama-model-input').value.trim() || 'llama3';
@@ -349,7 +349,7 @@ function renderHumanizerResults(data) {
             changesList.appendChild(li);
         });
     } else {
-        changesList.innerHTML = '<li>Cadence adjusted for 100% green human flow</li>';
+        changesList.innerHTML = '<li>Cadence adjusted for natural human flow</li>';
     }
 
     // Generate Diff View
