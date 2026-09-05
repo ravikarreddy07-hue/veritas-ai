@@ -255,10 +255,13 @@ function showSentenceTooltip(e, sent) {
 }
 
 function moveSentenceTooltip(e) {
+    if (window.innerWidth < 640) {
+        return; // Handled by CSS bottom docking on mobile
+    }
     const x = e.clientX + 15;
     const y = e.clientY + 15;
-    tooltip.style.left = `${Math.min(window.innerWidth - 280, x)}px`;
-    tooltip.style.top = `${Math.min(window.innerHeight - 150, y)}px`;
+    tooltip.style.left = `${Math.min(window.innerWidth - 290, Math.max(10, x))}px`;
+    tooltip.style.top = `${Math.min(window.innerHeight - 180, Math.max(10, y))}px`;
 }
 
 function hideSentenceTooltip() {

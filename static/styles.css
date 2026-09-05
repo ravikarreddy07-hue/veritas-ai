@@ -1,11 +1,23 @@
 html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    width: 100%;
 }
 
 body {
     font-family: 'Inter', sans-serif;
     background-color: #030712;
     color: #f3f4f6;
+    overflow-x: hidden;
+    width: 100%;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 code, pre, .font-mono {
@@ -79,6 +91,18 @@ code, pre, .font-mono {
     pointer-events: none;
     transition: opacity 0.15s ease, transform 0.15s ease;
     z-index: 999;
+}
+
+@media (max-width: 640px) {
+    #sentence-tooltip {
+        left: 16px !important;
+        right: 16px !important;
+        bottom: 16px !important;
+        top: auto !important;
+        max-width: calc(100vw - 32px) !important;
+        width: calc(100vw - 32px) !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 8px 10px -6px rgba(0, 0, 0, 0.8);
+    }
 }
 
 /* Diff viewer highlights */
