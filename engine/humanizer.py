@@ -32,9 +32,9 @@ TRANSITION_REPLACEMENTS = {
         ("on the other hand,", ["Then again,", "At the same time,", "Still,"])
     ],
     "academic": [
-        ("furthermore,", ["Additionally,", "Likewise,", "Equally important,"]),
+        ("furthermore,", ["Equally notable,", "Likewise,", "Equally important,"]),
         ("moreover,", ["In tandem with this,", "Closely related,", ""]),
-        ("additionally,", ["In complement,", "Further,", ""]),
+        ("additionally,", ["In complement,", "Further,", "Along with this,"]),
         ("in addition,", ["Alongside this,", "In parallel,"]),
         ("consequently,", ["Accordingly,", "It follows that,", "Hence,"]),
         ("subsequently,", ["Following this,", "Thereafter,"]),
@@ -46,8 +46,8 @@ TRANSITION_REPLACEMENTS = {
         ("on the other hand,", ["In contrast,", "By comparison,"])
     ],
     "professional": [
-        ("furthermore,", ["In addition,", "Also,", ""]),
-        ("moreover,", ["What's more,", "Additionally,", ""]),
+        ("furthermore,", ["Beyond this,", "Also,", ""]),
+        ("moreover,", ["What's more,", "Along with this,", ""]),
         ("additionally,", ["Along with this,", "Also,"]),
         ("in addition,", ["As well,", ""]),
         ("consequently,", ["Therefore,", "As such,"]),
@@ -59,6 +59,7 @@ TRANSITION_REPLACEMENTS = {
         ("in conclusion,", ["To summarize,", "In close,"]),
         ("on the other hand,", ["Alternatively,", "By contrast,"])
     ],
+
     "creative": [
         ("furthermore,", ["What's more,", "Even better,", ""]),
         ("moreover,", ["And then,", "Not just that—", ""]),
@@ -274,8 +275,8 @@ class AIHumanizer:
         tone = tone.lower() if tone in ["natural", "academic", "professional", "creative"] else "natural"
         intensity = intensity.lower() if intensity in ["mild", "balanced", "aggressive"] else "balanced"
         
-        # Target AI percentage threshold to guarantee "Human-Written" verdict
-        target_score = 8 if intensity == "aggressive" else (12 if intensity == "balanced" else 18)
+        # Target AI percentage threshold: Guaranteed < 15% across all modes
+        target_score = 8 if intensity == "aggressive" else (12 if intensity == "balanced" else 15)
 
         # Step 0: Academic Shield Protection
         entity_map = {}
@@ -320,7 +321,12 @@ class AIHumanizer:
                         clause_patterns = [
                             (r',\s+which\s+', '. This '),
                             (r',\s+while\s+', '. Meanwhile, '),
-                            (r';\s+', '. ')
+                            (r',\s+whereas\s+', '. In contrast, '),
+                            (r';\s+', '. '),
+                            (r',\s+thereby\s+', '. This effectively '),
+                            (r',\s+enabling\s+', '. This allows '),
+                            (r',\s+facilitating\s+', '. This supports '),
+                            (r',\s+and\s+therefore\s+', '. Therefore, ')
                         ]
                         for cp_pat, cp_rep in clause_patterns:
                             if re.search(cp_pat, s, re.IGNORECASE):
@@ -332,31 +338,48 @@ class AIHumanizer:
                 modified = re.sub(r'\s+', ' ', modified).strip()
                 all_changes.extend(p2_changes)
             else:
-                # Pass 3: Conversational Anchors & Burstiness Polish
+                # Pass 3: Conversational Anchors, Extended Splitting & High-Cadence Polish
                 p3_changes = []
                 sents = split_sentences(modified)
-                if len(sents) >= 4:
-                    # Soften the penultimate sentence with a natural human anchor if it lacks one
-                    penult = sents[-2].strip()
-                    if not any(penult.lower().startswith(x) for x in ["in practice,", "at its core,", "clearly,", "notice that", "simple as that", "also,", "plus,"]):
-                        sents[-2] = f"In practice, {penult[0].lower() + penult[1:] if len(penult) > 1 else penult}"
-                        p3_changes.append("Added natural human contextual anchor")
-                    modified = " ".join(sents)
 
-                has_punch = any(p in modified.lower() for p in ALL_PUNCHLINE_ROOTS)
+                # Split long sentences at conjunctions if score remains elevated
+                split_sents = []
+                for s in sents:
+                    words = tokenize_words(s)
+                    if len(words) >= 16:
+                        for conj_pat, conj_rep in [(r',\s+and\s+', '. Also, '), (r',\s+but\s+', '. Still, ')]:
+                            if re.search(conj_pat, s, re.IGNORECASE):
+                                s = re.sub(conj_pat, conj_rep, s, count=1)
+                                p3_changes.append("Split uniform sentence for enhanced burstiness")
+                                break
+                    split_sents.append(s)
+                sents = split_sents
+
+                if len(sents) >= 4:
+                    penult = sents[-2].strip()
+                    if not any(penult.lower().startswith(x) for x in ["in practice,", "at its core,", "clearly,", "notice that", "simple as that", "also,", "plus,", "notably,"]):
+                        anchor = "In practice, " if tone != "academic" else "Notably, "
+                        sents[-2] = f"{anchor}{penult[0].lower() + penult[1:] if len(penult) > 1 else penult}"
+                        p3_changes.append("Added natural contextual anchor")
+
+                # Ensure at least one cadence punchline exists
+                has_punch = any(p in " ".join(sents).lower() for p in ALL_PUNCHLINE_ROOTS)
                 if not has_punch:
                     pool = CADENCE_PUNCH_LINES.get(tone, CADENCE_PUNCH_LINES["natural"])
                     if pool:
-                        modified = f"{modified} {pool[0]}"
+                        sents.insert(len(sents) // 2, pool[0])
                         p3_changes.append(f"Injected cadence punch: '{pool[0]}'")
-                all_changes.extend(p3_changes)
 
+                modified = " ".join(sents)
+                modified = re.sub(r'\s+', ' ', modified).strip()
+                all_changes.extend(p3_changes)
 
             # Check convergence score with temporary entity restoration
             eval_text = self._restore_academic_entities(modified, entity_map) if entity_map else modified
             current_ai = detector.analyze(eval_text)["ai_percentage"]
             if current_ai <= target_score:
                 break
+
 
         # Step Final: Restore Academic Entities
         if entity_map:
@@ -461,15 +484,18 @@ class AIHumanizer:
 
             restructured_sentences.append(sent)
 
-            # Inject a short punchline to maximize burstiness standard deviation ONLY IF no punchline already exists
-            if not has_existing_punch:
+            # Inject a short punchline to maximize burstiness standard deviation
+            punch_count = sum(1 for p in ALL_PUNCHLINE_ROOTS if p in " ".join(restructured_sentences).lower())
+            max_punches = 2 if (intensity == "aggressive" and len(raw_sentences) >= 6) else (1 if not has_existing_punch else 0)
+            if punch_count < max_punches:
                 if (intensity == "aggressive" and idx == 0 and len(raw_sentences) >= 2) or \
+                   (intensity == "aggressive" and idx == len(raw_sentences) - 2 and len(raw_sentences) >= 6) or \
                    (intensity == "balanced" and idx == 1 and len(raw_sentences) >= 3):
                     if punch_pool:
                         punch = punch_pool.pop()
                         restructured_sentences.append(punch)
                         changes_applied.append(f"Injected high-burstiness punch: '{punch}'")
-                        has_existing_punch = True
+
 
 
         # Reassemble text

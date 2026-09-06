@@ -136,25 +136,26 @@ AI_CLICHE_PATTERNS: Dict[str, Dict[str, str]] = {
     },
     r"\bin conclusion,\b": {
         "natural": "at the end of the day,",
-        "academic": "ultimately,",
+        "academic": "in closing,",
         "professional": "in summary,",
         "creative": "the takeaway is clear:",
         "desc": "Mechanical conclusion: 'in conclusion,'"
     },
     r"\bfurthermore,\b": {
         "natural": "also,",
-        "academic": "additionally,",
+        "academic": "equally notable,",
         "professional": "on top of that,",
         "creative": "what's more,",
         "desc": "Stiff transitional: 'furthermore,'"
     },
     r"\bmoreover,\b": {
         "natural": "plus,",
-        "academic": "in addition,",
+        "academic": "alongside this,",
         "professional": "alongside that,",
         "creative": "even better,",
         "desc": "Stiff transitional: 'moreover,'"
     },
+
     r"\bunderscores?\b": {
         "natural": "highlights",
         "academic": "emphasizes",

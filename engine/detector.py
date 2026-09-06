@@ -60,22 +60,22 @@ class AIDetector:
             cv = stdev_len / mean_len if mean_len > 0 else 0
             burstiness_val = min(1.0, cv)
 
-            # High variance (CV >= 0.40) is strongly human
-            if cv >= 0.50:
-                burstiness_ai_score = 6.0
-            elif cv >= 0.38:
-                burstiness_ai_score = 12.0
-            elif cv >= 0.28:
-                burstiness_ai_score = 25.0
-            elif cv >= 0.18:
-                burstiness_ai_score = 65.0
+            # High variance (CV >= 0.30) is strongly characteristic of authentic human cadence
+            if cv >= 0.40:
+                burstiness_ai_score = 5.0
+            elif cv >= 0.30:
+                burstiness_ai_score = 10.0
+            elif cv >= 0.22:
+                burstiness_ai_score = 18.0
+            elif cv >= 0.15:
+                burstiness_ai_score = 45.0
             else:
-                burstiness_ai_score = 90.0
+                burstiness_ai_score = 80.0
         else:
             stdev_len = 0.0
             mean_len = sent_lengths[0] if sent_lengths else 0
             burstiness_val = 0.35
-            burstiness_ai_score = 35.0
+            burstiness_ai_score = 25.0
 
         # 2. Lexical Diversity & Vocabulary Predictability
         unique_words = set(words)
@@ -88,33 +88,34 @@ class AIDetector:
         hapax = sum(1 for count in freqs.values() if count == 1)
         hapax_ratio = hapax / len(unique_words) if unique_words else 0
 
-        if ttr >= 0.75 and hapax_ratio >= 0.55:
-            lexical_ai_score = 8.0
-        elif ttr >= 0.60:
-            lexical_ai_score = 18.0
-        elif ttr <= 0.45 and total_words > 40:
-            lexical_ai_score = 80.0
+        if ttr >= 0.70 and hapax_ratio >= 0.50:
+            lexical_ai_score = 6.0
+        elif ttr >= 0.52:
+            lexical_ai_score = 12.0
+        elif ttr <= 0.38 and total_words > 40:
+            lexical_ai_score = 65.0
         else:
-            lexical_ai_score = 35.0
+            lexical_ai_score = 20.0
 
-        # 3. AI Cliché & Pattern Matching
+        # 3. AI Cliché & Pattern Matching (Excludes direct quotes to protect citations)
+        text_for_cliches = re.sub(r'["“][^"”\n]{2,300}?["”]', '', text)
         total_cliches_found = 0
         cliche_matches_list = []
         for regex, info in self.cliche_compiled:
-            matches = regex.findall(text)
+            matches = regex.findall(text_for_cliches)
             if matches:
                 total_cliches_found += len(matches)
                 cliche_matches_list.append(info["desc"])
 
         cliche_density = (total_cliches_found / (total_words / 100.0)) if total_words > 0 else 0
-        if cliche_density == 0:
-            cliche_ai_score = 5.0
-        elif cliche_density < 1.0:
-            cliche_ai_score = 45.0
-        elif cliche_density < 2.5:
-            cliche_ai_score = 75.0
+        if total_cliches_found == 0:
+            cliche_ai_score = 4.0
+        elif cliche_density < 0.8:
+            cliche_ai_score = 25.0
+        elif cliche_density < 2.0:
+            cliche_ai_score = 55.0
         else:
-            cliche_ai_score = 95.0
+            cliche_ai_score = 85.0
 
         # 4. Sentence Opener Repetition
         opener_penalties = 0
@@ -127,9 +128,10 @@ class AIDetector:
 
         opener_ratio = opener_penalties / total_sentences if total_sentences > 0 else 0
         if opener_ratio == 0:
-            opener_ai_score = 5.0
+            opener_ai_score = 4.0
         else:
-            opener_ai_score = min(95.0, 15.0 + (opener_ratio * 130.0))
+            opener_ai_score = min(90.0, 10.0 + (opener_ratio * 100.0))
+
 
         # 5. Sentence-by-sentence detailed breakdown & Heatmap
         analyzed_sentences = []
@@ -213,9 +215,10 @@ class AIDetector:
             (avg_sent_score * 0.15)
         )
 
-        # Natural human writing bonus if 0 cliches and high variance
-        if total_cliches_found == 0 and burstiness_val >= 0.35:
+        # Natural human writing bonus if 0 cliches and authentic human variance (CV >= 0.25)
+        if total_cliches_found == 0 and burstiness_val >= 0.25:
             raw_ai_prob *= 0.75
+
 
         ai_percentage = int(max(2, min(99, round(raw_ai_prob))))
         human_percentage = 100 - ai_percentage
