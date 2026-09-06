@@ -78,13 +78,13 @@ function clearInput() {
 function setTone(tone) {
     currentTone = tone;
     document.querySelectorAll('.tone-btn').forEach(btn => {
-        btn.classList.remove('bg-purple-600', 'text-white', 'border-purple-500');
-        btn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+        btn.classList.remove('control-btn-active');
+        btn.classList.add('control-btn');
     });
     const activeBtn = document.getElementById(`tone-${tone}`);
     if (activeBtn) {
-        activeBtn.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
-        activeBtn.classList.add('bg-purple-600', 'text-white', 'border-purple-500');
+        activeBtn.classList.remove('control-btn');
+        activeBtn.classList.add('control-btn-active');
     }
 }
 
@@ -92,13 +92,13 @@ function setTone(tone) {
 function setIntensity(intensity) {
     currentIntensity = intensity;
     document.querySelectorAll('.int-btn').forEach(btn => {
-        btn.classList.remove('bg-purple-600', 'text-white', 'border-purple-500');
-        btn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+        btn.classList.remove('control-btn-active');
+        btn.classList.add('control-btn');
     });
     const activeBtn = document.getElementById(`int-${intensity}`);
     if (activeBtn) {
-        activeBtn.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
-        activeBtn.classList.add('bg-purple-600', 'text-white', 'border-purple-500');
+        activeBtn.classList.remove('control-btn');
+        activeBtn.classList.add('control-btn-active');
     }
 
     const descEl = document.getElementById('intensity-desc');
@@ -331,7 +331,7 @@ function renderHumanizerResults(data) {
         deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
     } else {
         deltaBadge.textContent = 'Optimized';
-        deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/40';
+        deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40';
     }
 
     // Output Textarea
@@ -395,12 +395,12 @@ function setOutputTab(tab) {
     if (tab === 'clean') {
         cleanView.classList.remove('hidden');
         diffView.classList.add('hidden');
-        tabClean.className = 'font-semibold text-white border-b-2 border-purple-500 pb-1 flex items-center gap-1';
+        tabClean.className = 'font-semibold text-white border-b-2 border-indigo-400 pb-1 flex items-center gap-1';
         tabDiff.className = 'font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1';
     } else {
         cleanView.classList.add('hidden');
         diffView.classList.remove('hidden');
-        tabDiff.className = 'font-semibold text-white border-b-2 border-purple-500 pb-1 flex items-center gap-1';
+        tabDiff.className = 'font-semibold text-white border-b-2 border-indigo-400 pb-1 flex items-center gap-1';
         tabClean.className = 'font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1';
     }
     lucide.createIcons();

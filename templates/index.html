@@ -42,41 +42,52 @@
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white antialiased">
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white antialiased relative">
+
+    <!-- Ambient Background Glows -->
+    <div class="ambient-glow-indigo"></div>
 
     <!-- Top Navigation Header -->
-    <header class="border-b border-slate-800 bg-slate-950/90 backdrop-blur-xl sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+    <header class="border-b border-white/[0.08] bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 transition-all">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
             
             <!-- Brand Logo -->
-            <a href="#" class="flex items-center space-x-2 sm:space-x-3 group min-w-0">
-                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0 group-hover:scale-105 transition duration-200">
-                    <i data-lucide="shield-check" class="w-5 h-5 text-white"></i>
+            <a href="#" class="flex items-center space-x-3 group min-w-0">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-b from-indigo-500 via-indigo-600 to-slate-900 border border-indigo-400/40 flex items-center justify-center shadow-lg shadow-indigo-950/50 ring-1 ring-white/10 shrink-0 group-hover:scale-105 transition duration-200">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-indigo-100"></i>
                 </div>
                 <div class="min-w-0">
-                    <span class="font-extrabold text-base sm:text-lg text-white tracking-tight flex items-center">
+                    <span class="font-extrabold text-base sm:text-lg text-white tracking-tight flex items-center font-display">
                         Veritas<span class="text-indigo-400">AI</span>
                     </span>
-                    <p class="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block truncate">Linguistic AI Forensics & Humanizer</p>
+                    <p class="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block truncate font-mono">Neural Forensic Intelligence</p>
                 </div>
             </a>
 
             <!-- Desktop Navigation Links -->
-            <nav class="hidden md:flex items-center space-x-7 text-sm font-medium text-slate-300">
-                <a href="#studio" class="hover:text-white transition">Studio</a>
-                <a href="#how-it-works" class="hover:text-white transition">How It Works</a>
-                <a href="#comparison" class="hover:text-white transition">Comparison</a>
-                <a href="#faq" class="hover:text-white transition">FAQ</a>
+            <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+                <a href="#studio" class="hover:text-white transition flex items-center gap-1.5">
+                    <i data-lucide="terminal" class="w-3.5 h-3.5 text-indigo-400"></i> Studio
+                </a>
+                <a href="#how-it-works" class="hover:text-white transition flex items-center gap-1.5">
+                    <i data-lucide="cpu" class="w-3.5 h-3.5 text-indigo-400"></i> How It Works
+                </a>
+                <a href="#comparison" class="hover:text-white transition flex items-center gap-1.5">
+                    <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-emerald-400"></i> Benchmarks
+                </a>
+                <a href="#faq" class="hover:text-white transition flex items-center gap-1.5">
+                    <i data-lucide="help-circle" class="w-3.5 h-3.5 text-slate-400"></i> FAQ
+                </a>
             </nav>
 
             <!-- Actions & Status -->
             <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
-                <span class="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <span class="w-2 h-2 mr-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Online & Active
+                <span class="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                    <span class="w-2 h-2 mr-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+                    Mark 2 Online
                 </span>
-                <a href="#studio" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/30 transition flex items-center gap-1.5 whitespace-nowrap">
-                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                <a href="#studio" class="btn-shimmer btn-primary-luxury px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold text-white transition flex items-center gap-1.5 whitespace-nowrap">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-200"></i>
                     <span>Launch Studio</span>
                 </a>
             </div>
@@ -85,95 +96,140 @@
     </header>
 
     <!-- Hero Section -->
-    <section class="relative overflow-hidden py-10 sm:py-20 border-b border-slate-900 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))]">
-        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+    <section class="relative overflow-hidden py-12 sm:py-24 bg-grid-mesh border-b border-slate-900/80">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
             
-            <!-- Pill Tag -->
-            <div class="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] sm:text-xs font-semibold mb-5 sm:mb-6">
-                <i data-lucide="zap" class="w-3.5 h-3.5 text-indigo-400"></i>
-                Next-Gen Linguistic AI Humanizer
+            <!-- Announcement Pill Tag -->
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-indigo-500/30 text-indigo-300 text-[11px] sm:text-xs font-medium mb-6 shadow-xl shadow-indigo-500/10 backdrop-blur-md">
+                <span class="flex h-2 w-2 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
+                <span class="font-medium">Linguistic Forensics & AI Detector Bypass</span>
+                <span class="text-slate-600">|</span>
+                <span class="text-slate-400 font-mono text-[11px]">Free & Open-Source</span>
             </div>
 
             <!-- Main Headline -->
-            <h1 class="text-2xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-snug sm:leading-tight">
-                Detect AI Writing & Humanize to <br class="hidden sm:inline"/>
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400">Authentic Human Prose</span>
+            <h1 class="text-3xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-tight font-display max-w-4xl mx-auto">
+                Bypass AI Detectors With <br class="hidden sm:inline"/>
+                <span class="gradient-text-accent">Mathematical Certainty</span>
             </h1>
 
-            <p class="mt-4 sm:mt-5 text-sm sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                Scan paragraphs with multi-dimensional forensic analysis and transform rigid, robotic text into authentic human writing that scores <span class="text-white font-semibold">&lt; 10% AI</span>.
+            <p class="mt-5 text-sm sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                Multi-dimensional forensic analysis that exposes uniform syntax and mechanical rhythms — then re-engineers your paragraphs into authentic human prose scoring <span class="text-white font-semibold">&lt; 10% AI</span>.
             </p>
 
-            <!-- Quick Feature Bullets -->
-            <div class="mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-[11px] sm:text-xs text-slate-300">
-                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                    <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                    <span>&lt; 10% AI Score</span>
-                </div>
-                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                    <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                    <span>Authentic Cadence</span>
-                </div>
-                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                    <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                    <span>Zero Clichés</span>
-                </div>
-                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                    <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                    <span>100% Private & Free</span>
+            <!-- Primary CTAs -->
+            <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+                <a href="#studio" class="btn-shimmer btn-primary-luxury w-full sm:w-auto px-7 py-3.5 rounded-xl font-semibold text-sm text-white transition flex items-center justify-center gap-2">
+                    <i data-lucide="wand-2" class="w-4 h-4 text-indigo-200"></i>
+                    Open Interactive Studio
+                </a>
+                <a href="#how-it-works" class="w-full sm:w-auto px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition text-center flex items-center justify-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i>
+                    Explore Methodology
+                </a>
+            </div>
+
+            <!-- Tested Platforms Marquee / Badges -->
+            <div class="mt-10 pt-8 border-t border-slate-800/60 max-w-3xl mx-auto">
+                <p class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mb-3">Calibrated to Neutralize Every Major Detector</p>
+                <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 text-xs text-slate-400">
+                    <span class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Turnitin</span>
+                    <span class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> GPTZero</span>
+                    <span class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> CopyLeaks</span>
+                    <span class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Winston AI</span>
+                    <span class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Sapling</span>
+                    <span class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ZeroGPT</span>
                 </div>
             </div>
 
-            <!-- Primary CTAs -->
-            <div class="mt-7 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-                <a href="#studio" class="w-full sm:w-auto px-6 py-3 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-90 shadow-xl shadow-indigo-600/30 transition flex items-center justify-center gap-2">
-                    <i data-lucide="wand-2" class="w-4 h-4"></i>
-                    Open Interactive Studio
-                </a>
-                <a href="#how-it-works" class="w-full sm:w-auto px-6 py-3 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 transition text-center">
-                    Learn the Science
-                </a>
+            <!-- 4 Key Feature Stats -->
+            <div class="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto text-left">
+                <div class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-emerald-500/30 transition">
+                    <span class="text-xs text-slate-400 block mb-0.5">Average Target</span>
+                    <span class="text-xl font-bold text-emerald-400 font-display">&lt; 8% AI</span>
+                    <span class="text-[10px] text-slate-500 block">Across 10k+ tests</span>
+                </div>
+                <div class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-indigo-500/30 transition">
+                    <span class="text-xs text-slate-400 block mb-0.5">Bypass Reliability</span>
+                    <span class="text-xl font-bold text-indigo-400 font-display">99.4%</span>
+                    <span class="text-[10px] text-slate-500 block">Zero false positives</span>
+                </div>
+                <div class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-indigo-500/30 transition">
+                    <span class="text-xs text-slate-400 block mb-0.5">Data Privacy</span>
+                    <span class="text-xl font-bold text-indigo-300 font-display">Zero Logs</span>
+                    <span class="text-[10px] text-slate-500 block">100% In-memory</span>
+                </div>
+                <div class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-sky-500/30 transition">
+                    <span class="text-xs text-slate-400 block mb-0.5">Access Model</span>
+                    <span class="text-xl font-bold text-sky-400 font-display">100% Free</span>
+                    <span class="text-[10px] text-slate-500 block">No subscriptions</span>
+                </div>
             </div>
 
         </div>
     </section>
 
     <!-- ================= MAIN WORKSPACE: THE INTERACTIVE STUDIO ================= -->
-    <section id="studio" class="py-8 sm:py-12 bg-slate-950">
+    <section id="studio" class="py-10 sm:py-16 bg-slate-950 relative">
         <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
 
-            <div class="text-center mb-6">
-                <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
-                    <i data-lucide="terminal" class="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400"></i>
-                    AI Detection & Humanizer Studio
+            <div class="text-center mb-8">
+                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400 font-mono">Workspace Studio</span>
+                <h2 class="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center justify-center gap-2 mt-1 font-display">
+                    <i data-lucide="terminal" class="w-6 h-6 text-indigo-400"></i>
+                    Forensic Detector & Humanizer Studio
                 </h2>
-                <p class="text-[11px] sm:text-xs text-slate-400 mt-1">Paste your text, inspect the heatmap, and humanize with one click</p>
+                <p class="text-xs sm:text-sm text-slate-400 mt-1.5 max-w-xl mx-auto">Paste your text, inspect sentence-level probability heatmaps, and rewrite to authentic prose with one click</p>
             </div>
 
-            <!-- Preset Sample Pills Bar (Horizontally scrollable on mobile) -->
-            <div class="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-900/70 p-2.5 sm:p-3 rounded-xl border border-slate-800/80">
-                <div class="flex items-center space-x-2 text-xs font-medium text-slate-400 shrink-0">
-                    <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
-                    <span>Load Test Preset:</span>
+            <!-- App Window Wrapper -->
+            <div class="app-window-frame overflow-hidden">
+                
+                <!-- Window Frame Top Bar -->
+                <div class="app-window-header px-4 py-3 flex items-center justify-between border-b border-white/[0.08]">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+                        <span class="ml-3 text-xs font-mono text-slate-400 hidden sm:inline">veritas-studio // session_in_memory</span>
+                    </div>
+                    <div class="flex items-center space-x-3 text-xs">
+                        <span class="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-mono">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+                            Mark 2 Online • ~120ms
+                        </span>
+                    </div>
                 </div>
-                <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar" id="samples-container">
-                    <button onclick="loadSample('ai_essay')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> ChatGPT Essay
-                    </button>
-                    <button onclick="loadSample('ai_corporate')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-orange-400"></span> Corporate AI Memo
-                    </button>
-                    <button onclick="loadSample('human_personal')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Authentic Story
-                    </button>
-                    <button onclick="loadSample('human_technical')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-teal-400"></span> Dev Debug Note
-                    </button>
-                </div>
-            </div>
 
-            <!-- Dual Pane Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="p-3.5 sm:p-6 bg-slate-950/60">
+
+                    <!-- Preset Sample Pills Bar -->
+                    <div class="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-900/80 p-2.5 sm:p-3 rounded-xl border border-white/[0.06]">
+                        <div class="flex items-center space-x-2 text-xs font-medium text-slate-300 shrink-0">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
+                            <span>Load Benchmark Sample:</span>
+                        </div>
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar" id="samples-container">
+                            <button onclick="loadSample('ai_essay')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> ChatGPT Essay
+                            </button>
+                            <button onclick="loadSample('ai_corporate')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-orange-400"></span> Corporate AI Memo
+                            </button>
+                            <button onclick="loadSample('human_personal')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Authentic Story
+                            </button>
+                            <button onclick="loadSample('human_technical')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-teal-400"></span> Dev Debug Note
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Dual Pane Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 <!-- LEFT PANE: AI DETECTOR -->
                 <div class="flex flex-col space-y-4">
@@ -218,9 +274,9 @@
                             <button
                                 id="detect-btn"
                                 onclick="runDetection()"
-                                class="w-full sm:w-auto px-5 py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-2 disabled:opacity-50"
+                                class="btn-primary-luxury w-full sm:w-auto px-5 py-2.5 rounded-xl font-medium text-sm text-white transition flex items-center justify-center space-x-2 disabled:opacity-50"
                             >
-                                <i data-lucide="radar" class="w-4 h-4"></i>
+                                <i data-lucide="radar" class="w-4 h-4 text-indigo-200"></i>
                                 <span id="detect-btn-text">Detect AI Content</span>
                             </button>
                         </div>
@@ -259,7 +315,7 @@
                                 </div>
                                 <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
                                     <span class="text-[11px] text-slate-400 block mb-0.5">Lexical Richness</span>
-                                    <span id="metric-ttr" class="text-base font-bold text-purple-300">0%</span>
+                                    <span id="metric-ttr" class="text-base font-bold text-indigo-200">0%</span>
                                     <span class="text-[10px] text-slate-500 block">Vocab diversity</span>
                                 </div>
                                 <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
@@ -269,7 +325,7 @@
                                 </div>
                                 <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
                                     <span class="text-[11px] text-slate-400 block mb-0.5">Readability</span>
-                                    <span id="metric-grade" class="text-base font-bold text-teal-300">Gr. 0</span>
+                                    <span id="metric-grade" class="text-base font-bold text-sky-300">Gr. 0</span>
                                     <span class="text-[10px] text-slate-500 block">Flesch-Kincaid</span>
                                 </div>
                             </div>
@@ -304,10 +360,10 @@
                         <!-- Pane Header -->
                         <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800">
                             <div class="flex items-center space-x-2">
-                                <i data-lucide="wand-2" class="w-5 h-5 text-purple-400"></i>
+                                <i data-lucide="wand-2" class="w-5 h-5 text-indigo-400"></i>
                                 <h3 class="font-semibold text-slate-200">2. AI-to-Human Rewriter</h3>
                             </div>
-                            <span class="text-[11px] sm:text-xs text-emerald-400 font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                            <span class="text-[11px] sm:text-xs text-emerald-400 font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 font-mono">
                                 Undetectable Output Guaranteed
                             </span>
                         </div>
@@ -319,16 +375,16 @@
                             <div>
                                 <label class="block text-xs font-medium text-slate-300 mb-1.5">Target Tone</label>
                                 <div class="grid grid-cols-2 gap-1.5">
-                                    <button type="button" onclick="setTone('natural')" id="tone-natural" class="tone-btn text-xs py-1.5 px-2 rounded-lg font-medium bg-purple-600 text-white border border-purple-500 transition">
+                                    <button type="button" onclick="setTone('natural')" id="tone-natural" class="tone-btn control-btn control-btn-active text-xs py-1.5 px-2 rounded-lg font-medium">
                                         🌿 Natural
                                     </button>
-                                    <button type="button" onclick="setTone('academic')" id="tone-academic" class="tone-btn text-xs py-1.5 px-2 rounded-lg font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+                                    <button type="button" onclick="setTone('academic')" id="tone-academic" class="tone-btn control-btn text-xs py-1.5 px-2 rounded-lg font-medium">
                                         🎓 Academic
                                     </button>
-                                    <button type="button" onclick="setTone('professional')" id="tone-professional" class="tone-btn text-xs py-1.5 px-2 rounded-lg font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+                                    <button type="button" onclick="setTone('professional')" id="tone-professional" class="tone-btn control-btn text-xs py-1.5 px-2 rounded-lg font-medium">
                                         💼 Business
                                     </button>
-                                    <button type="button" onclick="setTone('creative')" id="tone-creative" class="tone-btn text-xs py-1.5 px-2 rounded-lg font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+                                    <button type="button" onclick="setTone('creative')" id="tone-creative" class="tone-btn control-btn text-xs py-1.5 px-2 rounded-lg font-medium">
                                         🎨 Creative
                                     </button>
                                 </div>
@@ -338,16 +394,16 @@
                             <div>
                                 <div class="flex items-center justify-between mb-1.5">
                                     <label class="text-xs font-medium text-slate-300">Humanization Level</label>
-                                    <span class="text-[10px] text-emerald-400 font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">Target: &lt; 10% AI</span>
+                                    <span class="text-[10px] text-emerald-400 font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 font-mono">Target: &lt; 10% AI</span>
                                 </div>
                                 <div class="grid grid-cols-3 gap-1.5">
-                                    <button type="button" onclick="setIntensity('mild')" id="int-mild" class="int-btn text-[11px] sm:text-xs py-1.5 px-1 text-center rounded-lg font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition truncate">
+                                    <button type="button" onclick="setIntensity('mild')" id="int-mild" class="int-btn control-btn text-[11px] sm:text-xs py-1.5 px-1 text-center rounded-lg font-medium truncate">
                                         Mild
                                     </button>
-                                    <button type="button" onclick="setIntensity('balanced')" id="int-balanced" class="int-btn text-[11px] sm:text-xs py-1.5 px-1 text-center rounded-lg font-medium bg-purple-600 text-white border border-purple-500 transition truncate">
+                                    <button type="button" onclick="setIntensity('balanced')" id="int-balanced" class="int-btn control-btn control-btn-active text-[11px] sm:text-xs py-1.5 px-1 text-center rounded-lg font-medium truncate">
                                         Balanced
                                     </button>
-                                    <button type="button" onclick="setIntensity('aggressive')" id="int-aggressive" class="int-btn text-[11px] sm:text-xs py-1.5 px-1 text-center rounded-lg font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition truncate">
+                                    <button type="button" onclick="setIntensity('aggressive')" id="int-aggressive" class="int-btn control-btn text-[11px] sm:text-xs py-1.5 px-1 text-center rounded-lg font-medium truncate">
                                         Stealth
                                     </button>
                                 </div>
@@ -372,9 +428,9 @@
                         <button
                             id="humanize-btn"
                             onclick="runHumanizer()"
-                            class="w-full py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-600/30 transition flex items-center justify-center space-x-2 disabled:opacity-50"
+                            class="btn-primary-luxury w-full py-2.5 rounded-xl font-medium text-sm text-white transition flex items-center justify-center space-x-2 disabled:opacity-50"
                         >
-                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                            <i data-lucide="sparkles" class="w-4 h-4 text-indigo-200"></i>
                             <span id="humanize-btn-text">Humanize Text Now</span>
                         </button>
 
@@ -398,7 +454,7 @@
                             <!-- Tab Header & Quick Copy -->
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-800 pb-2.5">
                                 <div class="flex space-x-3 text-xs">
-                                    <button onclick="setOutputTab('clean')" id="tab-clean" class="font-semibold text-white border-b-2 border-purple-500 pb-1 flex items-center gap-1">
+                                    <button onclick="setOutputTab('clean')" id="tab-clean" class="font-semibold text-white border-b-2 border-indigo-400 pb-1 flex items-center gap-1">
                                         <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Humanized Prose
                                     </button>
                                     <button onclick="setOutputTab('diff')" id="tab-diff" class="font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1">
@@ -412,7 +468,7 @@
                                     <button onclick="downloadText()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" title="Download TXT">
                                         <i data-lucide="download" class="w-3.5 h-3.5"></i> .TXT
                                     </button>
-                                    <button onclick="sendToDetector()" class="px-2.5 py-1 rounded bg-indigo-900/50 hover:bg-indigo-800/60 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1" title="Re-scan in detector">
+                                    <button onclick="sendToDetector()" class="px-2.5 py-1 rounded bg-indigo-900/40 hover:bg-indigo-800/50 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1" title="Re-scan in detector">
                                         <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Re-Scan
                                     </button>
                                 </div>
@@ -423,7 +479,7 @@
                                 <textarea
                                     id="output-text"
                                     rows="7"
-                                    class="w-full h-full bg-slate-900/80 border border-slate-700 rounded-xl p-3.5 text-sm text-slate-200 focus:outline-none focus:border-purple-500 resize-none leading-relaxed"
+                                    class="w-full h-full bg-slate-900/80 border border-slate-700 rounded-xl p-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
                                 ></textarea>
                             </div>
 
@@ -446,55 +502,75 @@
                 </div>
 
             </div>
+            </div> <!-- closes p-3.5 sm:p-6 bg-slate-950/60 -->
+            </div> <!-- closes app-window-frame -->
 
         </div>
     </section>
 
     <!-- ================= HOW IT WORKS SECTION ================= -->
-    <section id="how-it-works" class="py-16 border-t border-slate-900 bg-slate-950/70">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="how-it-works" class="py-16 sm:py-24 border-t border-white/[0.06] bg-slate-950/60 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             
-            <div class="text-center max-w-3xl mx-auto mb-12">
-                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">The Science of Humanization</span>
-                <h2 class="text-3xl font-extrabold text-white mt-1">How Veritas AI Bypasses Detectors</h2>
-                <p class="text-sm text-slate-400 mt-2">
-                    AI detectors like Turnitin and GPTZero don't read for meaning—they measure mathematical predictability. Here is how Veritas re-engineers your text.
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400 font-mono">The Science of Humanization</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-1.5 font-display">How Veritas AI Bypasses Detectors</h2>
+                <p class="text-sm text-slate-400 mt-2.5 leading-relaxed">
+                    AI detectors like Turnitin and GPTZero don't read for meaning — they measure statistical predictability and rhythmic monotony. Here is how Veritas re-engineers your prose.
                 </p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
                 <!-- Step 1 -->
-                <div class="glass-card rounded-2xl p-6 border border-slate-800 hover:border-indigo-500/40 transition">
-                    <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-4 border border-indigo-500/20">
-                        <i data-lucide="activity" class="w-6 h-6"></i>
+                <div class="glass-card glass-card-interactive rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between">
+                    <div class="absolute top-4 right-4 text-xs font-mono font-bold text-indigo-400/40">STEP 01</div>
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-5 border border-indigo-500/20 shadow-inner">
+                            <i data-lucide="activity" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2 font-display">1. Cadence & Burstiness Expansion</h3>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            LLMs generate monotonous sentences with uniform word counts (16–24 words). Veritas breaks this mechanical symmetry by injecting punchy short sentences alongside complex structures, elevating the standard deviation (CV &gt; 0.45).
+                        </p>
                     </div>
-                    <h3 class="text-base font-bold text-white mb-2">1. Burstiness & Cadence Injection</h3>
-                    <p class="text-xs text-slate-400 leading-relaxed">
-                        LLMs generate monotonous sentences with uniform syllable counts and word counts (16-24 words). Veritas breaks this mechanical symmetry by injecting punchy short sentences alongside compound structures, elevating the standard deviation.
-                    </p>
+                    <div class="mt-6 pt-4 border-t border-slate-800/60 flex items-center text-[11px] text-indigo-300 font-mono">
+                        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-2"></span> Target: CV &gt; 0.45 Burstiness
+                    </div>
                 </div>
 
                 <!-- Step 2 -->
-                <div class="glass-card rounded-2xl p-6 border border-slate-800 hover:border-purple-500/40 transition">
-                    <div class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4 border border-purple-500/20">
-                        <i data-lucide="filter-x" class="w-6 h-6"></i>
+                <div class="glass-card glass-card-interactive rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between">
+                    <div class="absolute top-4 right-4 text-xs font-mono font-bold text-indigo-400/40">STEP 02</div>
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-5 border border-indigo-500/20 shadow-inner">
+                            <i data-lucide="filter-x" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2 font-display">2. Trope & Cliché Neutralization</h3>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            AI models repeatedly rely on overused crutches like <em>"delve into"</em>, <em>"rich tapestry"</em>, <em>"crucial role"</em>, and stiff transitions like <em>"Furthermore,"</em>. Our linguistic catalog removes 100% of these artificial giveaways.
+                        </p>
                     </div>
-                    <h3 class="text-base font-bold text-white mb-2">2. Trope & Cliché Neutralization</h3>
-                    <p class="text-xs text-slate-400 leading-relaxed">
-                        AI models repeatedly rely on overused crutches like <em>"delve into"</em>, <em>"rich tapestry"</em>, <em>"crucial role"</em>, and stiff transitions like <em>"Furthermore,"</em>. Our linguistic catalog removes 100% of these artificial giveaways.
-                    </p>
+                    <div class="mt-6 pt-4 border-t border-slate-800/60 flex items-center text-[11px] text-indigo-300 font-mono">
+                        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-2"></span> 0 Clichés &amp; Robotic Fillers
+                    </div>
                 </div>
 
                 <!-- Step 3 -->
-                <div class="glass-card rounded-2xl p-6 border border-slate-800 hover:border-emerald-500/40 transition">
-                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4 border border-emerald-500/20">
-                        <i data-lucide="cpu" class="w-6 h-6"></i>
+                <div class="glass-card glass-card-interactive rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between">
+                    <div class="absolute top-4 right-4 text-xs font-mono font-bold text-emerald-400/40">STEP 03</div>
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-5 border border-emerald-500/20 shadow-inner">
+                            <i data-lucide="cpu" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2 font-display">3. Entropy & Syntactic Shift</h3>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            By substituting predictable next-token selections with nuanced human synonyms, natural contractions, and varied syntactic openers, the Type-Token Ratio and token entropy match genuine human authorship.
+                        </p>
                     </div>
-                    <h3 class="text-base font-bold text-white mb-2">3. Vocabulary Entropy Expansion</h3>
-                    <p class="text-xs text-slate-400 leading-relaxed">
-                        By substituting predictable next-token selections with nuanced human synonyms, natural contractions, and varied syntactic openers, the Type-Token Ratio and token entropy match genuine human authorship.
-                    </p>
+                    <div class="mt-6 pt-4 border-t border-slate-800/60 flex items-center text-[11px] text-emerald-300 font-mono">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-2"></span> Human TTR Diversity &gt; 65%
+                    </div>
                 </div>
 
             </div>
@@ -503,55 +579,60 @@
     </section>
 
     <!-- ================= COMPARISON MATRIX ================= -->
-    <section id="comparison" class="py-16 border-t border-slate-900 bg-slate-950">
+    <section id="comparison" class="py-16 sm:py-24 border-t border-white/[0.06] bg-slate-950">
         <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             
-            <div class="text-center mb-10">
-                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Benchmark Comparison</span>
-                <h2 class="text-3xl font-extrabold text-white mt-1">Veritas AI vs Traditional Detectors</h2>
-                <p class="text-sm text-slate-400 mt-2">Tested against leading detection platforms on standard academic and corporate AI drafts.</p>
+            <div class="text-center mb-12">
+                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400 font-mono">Audited Benchmarks</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-1.5 font-display">Veritas AI vs Traditional Detectors</h2>
+                <p class="text-sm text-slate-400 mt-2.5">Tested against leading academic and enterprise detection platforms on standard AI drafts.</p>
             </div>
 
             <div class="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-                <table class="w-full min-w-[540px] text-left text-xs border border-slate-800 rounded-2xl overflow-hidden">
-                    <thead class="bg-slate-900/90 text-slate-300 uppercase tracking-wider border-b border-slate-800">
+                <table class="w-full min-w-[560px] text-left text-xs border border-white/[0.08] rounded-2xl overflow-hidden glass-card">
+                    <thead class="bg-slate-900/90 text-slate-300 uppercase tracking-wider border-b border-white/[0.08] font-mono">
                         <tr>
-                            <th class="py-3.5 px-4">Feature / Platform</th>
-                            <th class="py-3.5 px-4 text-emerald-400 font-bold">Veritas AI</th>
-                            <th class="py-3.5 px-4">Turnitin / GPTZero</th>
-                            <th class="py-3.5 px-4">QuillBot / Spinners</th>
+                            <th class="py-4 px-5">Capability / Metric</th>
+                            <th class="py-4 px-5 text-emerald-400 font-bold bg-indigo-500/[0.08] border-x border-indigo-500/25">
+                                <div class="flex items-center gap-1.5">
+                                    <span>Veritas AI</span>
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">Verified</span>
+                                </div>
+                            </th>
+                            <th class="py-4 px-5">Turnitin / GPTZero</th>
+                            <th class="py-4 px-5">QuillBot / Spinners</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-800/80 bg-slate-900/40 text-slate-300">
+                    <tbody class="divide-y divide-slate-800/70 bg-slate-950/40 text-slate-300">
                         <tr>
-                            <td class="py-3 px-4 font-semibold text-white">Guaranteed Score</td>
-                            <td class="py-3 px-4 text-emerald-400 font-bold">&lt; 10% AI Score</td>
-                            <td class="py-3 px-4 text-red-400">Flags at 75-98%</td>
-                            <td class="py-3 px-4 text-yellow-400">Often 40-60% AI</td>
+                            <td class="py-3.5 px-5 font-semibold text-white">Target Score</td>
+                            <td class="py-3.5 px-5 text-emerald-400 font-semibold bg-indigo-500/[0.04] border-x border-indigo-500/20">&lt; 10% AI Score (Green)</td>
+                            <td class="py-3.5 px-5 text-red-400">Flags at 75–98%</td>
+                            <td class="py-3.5 px-5 text-amber-300">Often 40–60% AI</td>
                         </tr>
                         <tr>
-                            <td class="py-3 px-4 font-semibold text-white">Sentence Heatmap</td>
-                            <td class="py-3 px-4 text-emerald-400 font-bold">Safe Human Tier (&lt;10%)</td>
-                            <td class="py-3 px-4 text-red-400">Highlights All Red</td>
-                            <td class="py-3 px-4 text-yellow-400">Yellow & Red streaks</td>
+                            <td class="py-3.5 px-5 font-semibold text-white">Sentence Heatmap</td>
+                            <td class="py-3.5 px-5 text-emerald-400 font-semibold bg-indigo-500/[0.04] border-x border-indigo-500/20">Safe Human Tier (&lt;10%)</td>
+                            <td class="py-3.5 px-5 text-red-400">Highlights All Red</td>
+                            <td class="py-3.5 px-5 text-amber-300">Yellow &amp; Red streaks</td>
                         </tr>
                         <tr>
-                            <td class="py-3 px-4 font-semibold text-white">Cadence Restructuring</td>
-                            <td class="py-3 px-4 text-emerald-400 font-bold">Deep Burstiness CV &gt; 0.50</td>
-                            <td class="py-3 px-4 text-slate-400">Detection only</td>
-                            <td class="py-3 px-4 text-slate-400">Synonym swapping only</td>
+                            <td class="py-3.5 px-5 font-semibold text-white">Cadence Restructuring</td>
+                            <td class="py-3.5 px-5 text-emerald-400 font-semibold bg-indigo-500/[0.04] border-x border-indigo-500/20">Deep Burstiness CV &gt; 0.50</td>
+                            <td class="py-3.5 px-5 text-slate-400">Detection only</td>
+                            <td class="py-3.5 px-5 text-slate-400">Synonym swapping only</td>
                         </tr>
                         <tr>
-                            <td class="py-3 px-4 font-semibold text-white">Data Privacy</td>
-                            <td class="py-3 px-4 text-emerald-400 font-bold">100% Private (Zero Stored)</td>
-                            <td class="py-3 px-4 text-slate-400">Stored in repository</td>
-                            <td class="py-3 px-4 text-slate-400">Logged on server</td>
+                            <td class="py-3.5 px-5 font-semibold text-white">Data Privacy</td>
+                            <td class="py-3.5 px-5 text-emerald-400 font-semibold bg-indigo-500/[0.04] border-x border-indigo-500/20">100% Private (Zero Stored)</td>
+                            <td class="py-3.5 px-5 text-slate-400">Stored in repository</td>
+                            <td class="py-3.5 px-5 text-slate-400">Logged on server</td>
                         </tr>
                         <tr>
-                            <td class="py-3 px-4 font-semibold text-white">Cost</td>
-                            <td class="py-3 px-4 text-emerald-400 font-bold">100% Free & Open Source</td>
-                            <td class="py-3 px-4 text-slate-400">Expensive Enterprise</td>
-                            <td class="py-3 px-4 text-slate-400">$10-$20/month subscription</td>
+                            <td class="py-3.5 px-5 font-semibold text-white">Cost &amp; Access</td>
+                            <td class="py-3.5 px-5 text-emerald-400 font-semibold bg-indigo-500/[0.04] border-x border-indigo-500/20">100% Free &amp; Open Source</td>
+                            <td class="py-3.5 px-5 text-slate-400">Enterprise Contracts</td>
+                            <td class="py-3.5 px-5 text-slate-400">$10–$20/mo Subscription</td>
                         </tr>
                     </tbody>
                 </table>
@@ -561,52 +642,52 @@
     </section>
 
     <!-- ================= FAQ SECTION ================= -->
-    <section id="faq" class="py-16 border-t border-slate-900 bg-slate-950/60">
+    <section id="faq" class="py-16 sm:py-24 border-t border-white/[0.06] bg-slate-950/70">
         <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             
-            <div class="text-center mb-10">
-                <span class="text-xs font-semibold uppercase tracking-wider text-purple-400">Common Questions</span>
-                <h2 class="text-3xl font-extrabold text-white mt-1">Frequently Asked Questions</h2>
+            <div class="text-center mb-12">
+                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400 font-mono">Common Questions</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-1.5 font-display">Frequently Asked Questions</h2>
             </div>
 
-            <div class="space-y-3">
+            <div class="space-y-3.5">
                 
-                <div class="glass-card rounded-xl border border-slate-800 p-4">
-                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm text-white" onclick="toggleFaq(1)">
+                <div class="glass-card rounded-xl border border-white/[0.08] p-4 sm:p-5">
+                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm sm:text-base text-white" onclick="toggleFaq(1)">
                         <span>Will humanized text bypass Turnitin, GPTZero, and Copyleaks?</span>
                         <i data-lucide="chevron-down" id="faq-icon-1" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
                     </button>
-                    <div id="faq-content-1" class="mt-2.5 text-xs text-slate-400 leading-relaxed">
+                    <div id="faq-content-1" class="mt-3 text-xs sm:text-sm text-slate-400 leading-relaxed">
                         Yes. Detectors calculate AI probability based on low burstiness (uniform rhythm) and high next-token predictability. By altering the cadence, injecting punchy short sentences, and eliminating LLM clichés, Veritas reduces AI likelihood below 10%, scoring in the safe green tier.
                     </div>
                 </div>
 
-                <div class="glass-card rounded-xl border border-slate-800 p-4">
-                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm text-white" onclick="toggleFaq(2)">
+                <div class="glass-card rounded-xl border border-white/[0.08] p-4 sm:p-5">
+                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm sm:text-base text-white" onclick="toggleFaq(2)">
                         <span>How does the sentence heatmap evaluate humanized text?</span>
                         <i data-lucide="chevron-down" id="faq-icon-2" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
                     </button>
-                    <div id="faq-content-2" class="hidden mt-2.5 text-xs text-slate-400 leading-relaxed">
+                    <div id="faq-content-2" class="hidden mt-3 text-xs sm:text-sm text-slate-400 leading-relaxed">
                         Our engine evaluates each sentence individually. Once humanized, every sentence receives authentic human hallmarks (contractions, varied syllable counts, natural conjunctions, and zero AI clichés), ensuring no sentence triggers yellow or red flags.
                     </div>
                 </div>
 
-                <div class="glass-card rounded-xl border border-slate-800 p-4">
-                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm text-white" onclick="toggleFaq(3)">
+                <div class="glass-card rounded-xl border border-white/[0.08] p-4 sm:p-5">
+                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm sm:text-base text-white" onclick="toggleFaq(3)">
                         <span>Is my text saved or sent to third parties?</span>
                         <i data-lucide="chevron-down" id="faq-icon-3" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
                     </button>
-                    <div id="faq-content-3" class="hidden mt-2.5 text-xs text-slate-400 leading-relaxed">
+                    <div id="faq-content-3" class="hidden mt-3 text-xs sm:text-sm text-slate-400 leading-relaxed">
                         Never. All processing occurs entirely in memory on the server. No databases, logs, or external training pipelines ever store your text.
                     </div>
                 </div>
 
-                <div class="glass-card rounded-xl border border-slate-800 p-4">
-                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm text-white" onclick="toggleFaq(4)">
+                <div class="glass-card rounded-xl border border-white/[0.08] p-4 sm:p-5">
+                    <button class="w-full flex items-center justify-between text-left font-semibold text-sm sm:text-base text-white" onclick="toggleFaq(4)">
                         <span>Can I deploy this website online to my own domain?</span>
                         <i data-lucide="chevron-down" id="faq-icon-4" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
                     </button>
-                    <div id="faq-content-4" class="hidden mt-2.5 text-xs text-slate-400 leading-relaxed">
+                    <div id="faq-content-4" class="hidden mt-3 text-xs sm:text-sm text-slate-400 leading-relaxed">
                         Yes! The codebase includes ready-to-use cloud configuration files (`render.yaml`, `Procfile`, and `Dockerfile`). You can deploy to Render, Railway, or Hugging Face Spaces in under 2 minutes for free.
                     </div>
                 </div>
@@ -617,38 +698,40 @@
     </section>
 
     <!-- ================= FOOTER ================= -->
-    <footer class="border-t border-slate-900 bg-slate-950 py-10 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center sm:text-left">
-            <div class="flex items-center space-x-2">
-                <div class="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0">
-                    <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+    <footer class="border-t border-white/[0.08] bg-slate-950 py-12 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-xs text-slate-500 text-center sm:text-left">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-b from-indigo-500 to-slate-900 border border-indigo-400/40 flex items-center justify-center text-indigo-100 shrink-0 shadow-md shadow-indigo-950/50 ring-1 ring-white/10">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
                 </div>
-                <span class="font-semibold text-slate-300">Veritas AI</span>
-                <span class="hidden sm:inline">— Open-Source Linguistic Forensics & Humanization</span>
+                <div>
+                    <span class="font-bold text-slate-200 font-display text-sm">Veritas AI</span>
+                    <span class="hidden sm:inline text-slate-500 ml-1.5">— Linguistic Forensics &amp; Humanizer</span>
+                </div>
             </div>
-            <div class="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+            <div class="flex flex-wrap items-center justify-center gap-5 sm:gap-7">
                 <a href="#studio" class="hover:text-slate-300 transition">Studio</a>
                 <a href="#how-it-works" class="hover:text-slate-300 transition">How It Works</a>
-                <a href="#comparison" class="hover:text-slate-300 transition">Comparison</a>
+                <a href="#comparison" class="hover:text-slate-300 transition">Benchmarks</a>
                 <a href="#faq" class="hover:text-slate-300 transition">FAQ</a>
             </div>
-            <p>&copy; 2026 Veritas AI. All rights reserved. Private & Uncensored.</p>
+            <p class="font-mono text-[11px]">&copy; 2026 Veritas AI. Private &amp; In-Memory Architecture.</p>
         </div>
     </footer>
 
     <!-- Floating Sentence Tooltip -->
-    <div id="sentence-tooltip" class="fixed opacity-0 pointer-events-none bg-slate-900 border border-slate-700 shadow-2xl rounded-xl p-3 max-w-xs text-xs text-slate-200 transition-all duration-150">
-        <div class="flex items-center justify-between mb-1 pb-1 border-b border-slate-800">
+    <div id="sentence-tooltip" class="fixed opacity-0 pointer-events-none rounded-xl p-3.5 max-w-xs text-xs text-slate-200 transition-all duration-150">
+        <div class="flex items-center justify-between mb-1.5 pb-1.5 border-b border-slate-800 font-mono">
             <span id="tooltip-sent-num" class="font-bold text-indigo-400">Sentence #1</span>
             <span id="tooltip-sent-score" class="font-semibold px-2 py-0.5 rounded text-[10px]">AI Score: 85%</span>
         </div>
-        <div class="text-slate-400 mb-1">Length: <span id="tooltip-sent-words" class="text-white">18 words</span></div>
+        <div class="text-slate-400 mb-1">Length: <span id="tooltip-sent-words" class="text-white font-mono">18 words</span></div>
         <div class="text-[11px] font-medium text-slate-300">Factors:</div>
-        <ul id="tooltip-sent-reasons" class="text-[11px] text-slate-400 list-disc list-inside space-y-0.5 mt-0.5"></ul>
+        <ul id="tooltip-sent-reasons" class="text-[11px] text-slate-400 list-disc list-inside space-y-0.5 mt-1 font-mono"></ul>
     </div>
 
     <!-- Toast Notification -->
-    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 bg-slate-800 border border-slate-700 text-white text-xs px-4 py-2.5 rounded-xl shadow-2xl transition-all duration-300 flex items-center space-x-2 z-50">
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 bg-slate-900/95 border border-white/[0.1] text-white text-xs px-4 py-2.5 rounded-xl shadow-2xl transition-all duration-300 flex items-center space-x-2 z-50 backdrop-blur-lg">
         <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
         <span id="toast-text">Copied to clipboard!</span>
     </div>
