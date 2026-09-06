@@ -52,6 +52,7 @@ class HumanizeRequest(BaseModel):
     intensity: str = Field(default="balanced", description="Intensity: mild, balanced, aggressive")
     use_ollama: bool = Field(default=False, description="Whether to query local Ollama LLM")
     ollama_model: str = Field(default="llama3", description="Ollama model name")
+    academic_shield: bool = Field(default=True, description="Preserve in-text citations, bracketed numbers, and quotes")
 
 class RerollRequest(BaseModel):
     sentence: str = Field(..., description="Single sentence to reroll into 3 alternative variations")
@@ -130,7 +131,8 @@ async def humanize_text(req: HumanizeRequest):
         tone=req.tone,
         intensity=req.intensity,
         use_ollama=req.use_ollama,
-        ollama_model=req.ollama_model
+        ollama_model=req.ollama_model,
+        academic_shield=req.academic_shield
     )
 
     # 3. Analyze newly humanized text

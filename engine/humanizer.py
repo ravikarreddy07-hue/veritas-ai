@@ -117,17 +117,70 @@ class AIHumanizer:
     def __init__(self):
         pass
 
+    def _protect_academic_entities(self, text: str) -> Tuple[str, Dict[str, str]]:
+        """
+        Detects and shields in-text citations, bracketed references, and verbatim quotes
+        using unique placeholder tokens so linguistic restructuring leaves them intact.
+        """
+        entity_map = {}
+        counter = 0
+
+        # 1. Direct quotes e.g. "..." or “...”
+        quote_pattern = re.compile(r'["“][^"”\n]{2,300}?["”]')
+        def quote_sub(match):
+            nonlocal counter
+            token = f"__ACAD_SHIELD_QUOTE_{counter}__"
+            entity_map[token] = match.group(0)
+            counter += 1
+            return token
+        text = quote_pattern.sub(quote_sub, text)
+
+        # 2. Parenthetical citations e.g. (Smith et al., 2023), (Johnson, 2020; Lee, 2021)
+        paren_pattern = re.compile(
+            r'\([A-Z][A-Za-z\s\.\&]+(?:et al\.?)?,?\s*(?:19|20)\d{2}[a-z]?'
+            r'(?:,\s*(?:pp?\.?\s*\d+(?:-\d+)?|\d+(?:-\d+)?))?'
+            r'(?:;\s*[A-Z][A-Za-z\s\.\&]+(?:et al\.?)?,?\s*(?:19|20)\d{2}[a-z]?'
+            r'(?:,\s*(?:pp?\.?\s*\d+(?:-\d+)?|\d+(?:-\d+)?))?)*\)'
+        )
+        def paren_sub(match):
+            nonlocal counter
+            token = f"__ACAD_SHIELD_CITE_{counter}__"
+            entity_map[token] = match.group(0)
+            counter += 1
+            return token
+        text = paren_pattern.sub(paren_sub, text)
+
+        # 3. Bracketed numeric citations e.g. [1], [12, 15], [3-7]
+        bracket_pattern = re.compile(r'\[(?:\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*)\]')
+        def bracket_sub(match):
+            nonlocal counter
+            token = f"__ACAD_SHIELD_NUM_{counter}__"
+            entity_map[token] = match.group(0)
+            counter += 1
+            return token
+        text = bracket_pattern.sub(bracket_sub, text)
+
+        return text, entity_map
+
+    def _restore_academic_entities(self, text: str, entity_map: Dict[str, str]) -> str:
+        """Restores shielded citations and quotes back to their exact locations."""
+        for token, original in entity_map.items():
+            text = text.replace(token, original)
+        return text
+
     def humanize(
         self,
         text: str,
         tone: str = "natural",
         intensity: str = "balanced",
         use_ollama: bool = False,
-        ollama_model: str = "llama3"
+        ollama_model: str = "llama3",
+        academic_shield: bool = True
     ) -> Dict[str, Any]:
         """
         Humanizes AI-generated text by altering cadence, breaking monotonous rhythms,
         and eliminating recognizable LLM tropes to achieve human scores (< 20% AI).
+        Preserves citations & quotes when academic_shield is True.
         """
         text = text.strip() if text else ""
         if not text:
@@ -137,22 +190,30 @@ class AIHumanizer:
                 "changes_applied": [],
                 "tone": tone,
                 "intensity": intensity,
+                "shielded_items_count": 0,
                 "source": "empty"
             }
 
         if use_ollama:
-            llm_result = self._try_ollama_humanize(text, tone, intensity, ollama_model)
+            llm_result = self._try_ollama_humanize(text, tone, intensity, ollama_model, academic_shield)
             if llm_result:
                 return llm_result
 
-        return self._heuristic_humanize(text, tone, intensity)
+        return self._heuristic_humanize(text, tone, intensity, academic_shield)
 
-    def _heuristic_humanize(self, text: str, tone: str, intensity: str) -> Dict[str, Any]:
+    def _heuristic_humanize(self, text: str, tone: str, intensity: str, academic_shield: bool = True) -> Dict[str, Any]:
         tone = tone.lower() if tone in ["natural", "academic", "professional", "creative"] else "natural"
         intensity = intensity.lower() if intensity in ["mild", "balanced", "aggressive"] else "balanced"
 
         changes_applied = []
+        entity_map = {}
         modified = text
+
+        # Step 0: Academic Shield Protection
+        if academic_shield:
+            modified, entity_map = self._protect_academic_entities(modified)
+            if entity_map:
+                changes_applied.append(f"Academic Shield: Preserved {len(entity_map)} citations/quotes")
 
         # Step 1: Replace AI Cliches with tone-appropriate human phrasing
         for pattern, info in AI_CLICHE_PATTERNS.items():
@@ -235,6 +296,10 @@ class AIHumanizer:
         humanized_text = re.sub(r'([.!?])\s*([a-z])', lambda m: f"{m.group(1)} {m.group(2).upper()}", humanized_text)
         humanized_text = humanized_text.strip()
 
+        # Step 5: Restore Academic Entities (Citations, Bracketed Numbers, Quotes)
+        if entity_map:
+            humanized_text = self._restore_academic_entities(humanized_text, entity_map)
+
         unique_changes = list(dict.fromkeys(changes_applied))
 
         return {
@@ -243,6 +308,7 @@ class AIHumanizer:
             "changes_applied": unique_changes[:8],
             "tone": tone,
             "intensity": intensity,
+            "shielded_items_count": len(entity_map),
             "source": "heuristic_engine"
         }
 
@@ -251,15 +317,22 @@ class AIHumanizer:
         text: str,
         tone: str,
         intensity: str,
-        model: str
+        model: str,
+        academic_shield: bool = True
     ) -> Optional[Dict[str, Any]]:
+        entity_map = {}
+        target_text = text
+        if academic_shield:
+            target_text, entity_map = self._protect_academic_entities(text)
+
         prompt = (
             f"Rewrite the following text to sound 100% human-written, natural, and score below 15% on AI detectors. "
             f"Tone: {tone}. Intensity: {intensity}. "
             f"Drastically vary sentence lengths (mix short 3-word punchy sentences with compound sentences). "
             f"Eliminate ALL AI clichés (delve into, crucial role, testament to, rich tapestry, furthermore, moreover, in conclusion). "
             f"Use natural contractions (it's, don't, can't, we've). "
-            f"Return ONLY the rewritten paragraph without commentary:\n\n{text}"
+            f"Do not alter placeholder tokens like __ACAD_SHIELD_*. "
+            f"Return ONLY the rewritten paragraph without commentary:\n\n{target_text}"
         )
         try:
             with httpx.Client(timeout=8.0) as client:
@@ -275,6 +348,8 @@ class AIHumanizer:
                     data = res.json()
                     rewritten = data.get("response", "").strip()
                     if rewritten:
+                        if entity_map:
+                            rewritten = self._restore_academic_entities(rewritten, entity_map)
                         return {
                             "original_text": text,
                             "humanized_text": rewritten,
@@ -282,9 +357,10 @@ class AIHumanizer:
                                 f"Rewritten via local Ollama ({model})",
                                 f"Tone calibrated to {tone}",
                                 "High burstiness & natural contractions applied"
-                            ],
+                            ] + ([f"Academic Shield: Preserved {len(entity_map)} citations/quotes"] if entity_map else []),
                             "tone": tone,
                             "intensity": intensity,
+                            "shielded_items_count": len(entity_map),
                             "source": f"ollama_{model}"
                         }
         except Exception:

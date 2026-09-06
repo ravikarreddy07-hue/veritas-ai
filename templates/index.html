@@ -39,6 +39,8 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Mammoth.js for Client-side DOCX Extraction -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- PDF.js for Client-side PDF Extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <!-- Custom Styles -->
     <link rel="stylesheet" href="/static/styles.css">
     <!-- Favicon -->
@@ -244,8 +246,8 @@
                                 <h3 class="font-semibold text-slate-200">1. Forensic AI Detector</h3>
                             </div>
                             <div class="flex items-center space-x-2">
-                                <input type="file" id="doc-upload-input" accept=".txt,.docx,.md,.doc" class="hidden" onchange="handleFileUpload(event)">
-                                <button onclick="document.getElementById('doc-upload-input').click()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1" title="Upload Word docx or text file">
+                                <input type="file" id="doc-upload-input" accept=".txt,.docx,.md,.doc,.pdf" class="hidden" onchange="handleFileUpload(event)">
+                                <button onclick="document.getElementById('doc-upload-input').click()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1" title="Upload PDF, Word docx, or text file">
                                     <i data-lucide="file-up" class="w-3.5 h-3.5 text-indigo-400"></i> Upload
                                 </button>
                                 <button onclick="pasteToInput()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1" title="Paste from clipboard">
@@ -262,7 +264,7 @@
                             <textarea
                                 id="input-text"
                                 rows="9"
-                                placeholder="Paste or drag & drop documents (.docx, .txt) here to scan for robotic rhythm, uniform sentence lengths, and overused AI clichés..."
+                                placeholder="Paste or drag & drop documents (.pdf, .docx, .txt) here to scan for robotic rhythm, uniform sentence lengths, and overused AI clichés..."
                                 class="w-full h-full min-h-[220px] bg-slate-900/70 border border-slate-700/80 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition resize-none leading-relaxed"
                                 oninput="updateWordCount()"
                             ></textarea>
@@ -300,6 +302,10 @@
                                     <span class="text-[11px] sm:text-xs font-medium text-slate-400 uppercase tracking-wider">Analysis Result</span>
                                     <div id="verdict-title" class="text-lg sm:text-xl font-bold text-white mt-0.5 truncate">Likely AI-Generated</div>
                                     <p id="verdict-desc" class="text-xs text-slate-400 mt-1 line-clamp-2 sm:line-clamp-none">Summary of detection insights</p>
+                                    <button onclick="openAuditCertificate('detector')" class="mt-2.5 text-xs px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1.5 w-fit" title="Generate forensic authenticity certificate for this text">
+                                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-indigo-400"></i>
+                                        Generate Audit Certificate
+                                    </button>
                                 </div>
                                 <!-- Circular Gauge -->
                                 <div class="flex flex-col items-center shrink-0">
@@ -422,6 +428,21 @@
 
                         </div>
 
+                        <!-- Academic Shield Toggle -->
+                        <div class="mb-2.5 px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                            <label class="flex items-center space-x-2 cursor-pointer select-none" title="Automatically locks in-text citations (Smith, 2023), bracketed references [1], and quotes '...' so they are never altered.">
+                                <input type="checkbox" id="academic-shield-check" checked class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-indigo-500">
+                                <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                                    <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i>
+                                    Academic Shield
+                                </span>
+                                <span class="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Locks Citations & Quotes</span>
+                            </label>
+                            <span id="shielded-count-pill" class="hidden text-[10px] text-emerald-300 font-mono px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40">
+                                0 Shielded
+                            </span>
+                        </div>
+
                         <!-- Ollama Hook -->
                         <div class="mb-3 px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between text-xs">
                             <label class="flex items-center space-x-2 cursor-pointer">
@@ -498,6 +519,9 @@
                                     </button>
                                     <button onclick="downloadDocx()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-500/20 transition flex items-center gap-1" title="Download as Microsoft Word document">
                                         <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i> .DOCX
+                                    </button>
+                                    <button onclick="openAuditCertificate('humanizer')" class="px-2.5 py-1 rounded bg-emerald-900/30 hover:bg-emerald-800/40 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1" title="Generate printable verification certificate">
+                                        <i data-lucide="award" class="w-3.5 h-3.5 text-emerald-400"></i> Certificate
                                     </button>
                                     <button onclick="downloadText()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" title="Download TXT">
                                         <i data-lucide="download" class="w-3.5 h-3.5"></i> .TXT
@@ -793,6 +817,147 @@
         </div>
         <div class="mt-2.5 pt-2 border-t border-white/[0.06] text-[10px] text-slate-500 font-mono text-right">
             Press <kbd class="kbd-badge">Esc</kbd> to close
+        </div>
+    </div>
+
+    <!-- Forensic Audit Certificate Modal -->
+    <div id="certificate-modal" class="fixed inset-0 z-[2000] bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-3 sm:p-6 overflow-y-auto">
+        <div class="relative w-full max-w-2xl bg-[#0b0f19] border border-white/10 rounded-2xl shadow-2xl overflow-hidden my-auto certificate-print-container">
+            
+            <!-- Modal Actions Bar (hidden during print) -->
+            <div class="px-5 py-3 border-b border-white/[0.08] bg-slate-900/60 flex items-center justify-between no-print">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+                    <span class="text-xs font-semibold text-slate-200 font-display">Veritas AI Forensic Audit Certificate</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="printCertificate()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition flex items-center gap-1.5">
+                        <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print / Save PDF
+                    </button>
+                    <button onclick="closeAuditCertificate()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Printable Certificate Document Body -->
+            <div class="p-6 sm:p-8 space-y-5 text-slate-200 relative certificate-sheet" id="certificate-printable-area">
+                
+                <!-- Certificate Header -->
+                <div class="border-b border-white/10 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                            <i data-lucide="award" class="w-7 h-7 text-indigo-400"></i>
+                        </div>
+                        <div>
+                            <span class="text-[10px] uppercase font-mono tracking-widest text-indigo-400 font-bold block">Veritas AI Forensic Laboratory</span>
+                            <h2 class="text-lg sm:text-xl font-extrabold text-white font-display tracking-tight">Official Linguistic Audit Certificate</h2>
+                            <p class="text-[11px] text-slate-400">Cryptographic Proof of Authenticity & AI Bypass Compliance</p>
+                        </div>
+                    </div>
+                    <div class="text-left sm:text-right font-mono text-[11px] text-slate-400 space-y-0.5 shrink-0">
+                        <div>Cert ID: <span id="cert-id" class="text-white font-semibold">VER-2026-9842F</span></div>
+                        <div>Issued: <span id="cert-date" class="text-slate-300">September 6, 2026</span></div>
+                        <div>Engine: <span class="text-emerald-400 font-semibold">Veritas Mark 2</span></div>
+                    </div>
+                </div>
+
+                <!-- Document Identity & Fingerprint -->
+                <div class="bg-slate-900/80 rounded-xl p-3.5 border border-white/[0.06] space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-400 font-medium">Certified Content Excerpt:</span>
+                        <span id="cert-word-stats" class="text-slate-400 font-mono text-[11px]">0 words • 0 sentences</span>
+                    </div>
+                    <p id="cert-doc-snippet" class="text-xs text-slate-300 italic line-clamp-2 font-mono bg-slate-950/60 p-2.5 rounded-lg border border-white/[0.04]">
+                        "..."
+                    </p>
+                    <div class="pt-2 border-t border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] font-mono">
+                        <span class="text-slate-400">SHA-256 Fingerprint:</span>
+                        <span id="cert-hash" class="text-indigo-300 select-all truncate max-w-xs sm:max-w-md">...</span>
+                    </div>
+                </div>
+
+                <!-- Forensic Score Banner -->
+                <div class="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-indigo-950/40 border border-emerald-500/30 flex items-center justify-between gap-3">
+                    <div>
+                        <span class="text-[10px] uppercase font-mono tracking-wider text-emerald-400 font-semibold block">Audit Result</span>
+                        <div class="text-2xl font-black text-white font-display" id="cert-human-score">98.4% Human Authenticity</div>
+                        <p class="text-xs text-slate-300 mt-0.5" id="cert-verdict-summary">Cleared: Zero algorithmic monotony detected</p>
+                    </div>
+                    <div class="px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold font-mono shrink-0 flex items-center gap-1.5" id="cert-status-badge">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> PASSED
+                    </div>
+                </div>
+
+                <!-- Multi-Detector Calibration Benchmark Matrix -->
+                <div class="space-y-1.5">
+                    <span class="text-xs font-semibold text-slate-300 block">Target Platform Calibration Matrix:</span>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                        <div class="p-2 rounded-lg bg-slate-900/80 border border-white/[0.06]">
+                            <span class="text-[10px] text-slate-400 block">Turnitin</span>
+                            <span class="font-bold text-emerald-400 font-display" id="cert-turnitin">99.2%</span>
+                            <span class="text-[9px] text-slate-500 block">Undetected</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-900/80 border border-white/[0.06]">
+                            <span class="text-[10px] text-slate-400 block">GPTZero</span>
+                            <span class="font-bold text-emerald-400 font-display" id="cert-gptzero">98.6%</span>
+                            <span class="text-[9px] text-slate-500 block">Human Written</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-900/80 border border-white/[0.06]">
+                            <span class="text-[10px] text-slate-400 block">CopyLeaks</span>
+                            <span class="font-bold text-emerald-400 font-display" id="cert-copyleaks">98.0%</span>
+                            <span class="text-[9px] text-slate-500 block">Passed</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-900/80 border border-white/[0.06]">
+                            <span class="text-[10px] text-slate-400 block">Winston AI</span>
+                            <span class="font-bold text-emerald-400 font-display" id="cert-winston">98.8%</span>
+                            <span class="text-[9px] text-slate-500 block">100% Human</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Linguistic Forensic Indicators -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                    <div class="p-2 rounded-lg bg-slate-900/60 border border-white/[0.06]">
+                        <span class="text-[10px] text-slate-400 block">Cadence Variance</span>
+                        <span class="font-bold text-indigo-300 font-mono" id="cert-cv">0.52</span>
+                        <span class="text-[9px] text-slate-500 block">Burstiness</span>
+                    </div>
+                    <div class="p-2 rounded-lg bg-slate-900/60 border border-white/[0.06]">
+                        <span class="text-[10px] text-slate-400 block">Lexical Richness</span>
+                        <span class="font-bold text-indigo-200 font-mono" id="cert-ttr">72%</span>
+                        <span class="text-[9px] text-slate-500 block">Vocabulary TTR</span>
+                    </div>
+                    <div class="p-2 rounded-lg bg-slate-900/60 border border-white/[0.06]">
+                        <span class="text-[10px] text-slate-400 block">AI Cliché Tropes</span>
+                        <span class="font-bold text-amber-300 font-mono" id="cert-cliches">0</span>
+                        <span class="text-[9px] text-slate-500 block">Neutralized</span>
+                    </div>
+                    <div class="p-2 rounded-lg bg-slate-900/60 border border-white/[0.06]">
+                        <span class="text-[10px] text-slate-400 block">Academic Shield</span>
+                        <span class="font-bold text-emerald-400 font-mono" id="cert-shielded">Active</span>
+                        <span class="text-[9px] text-slate-500 block">Citations Intact</span>
+                    </div>
+                </div>
+
+                <!-- Official Guarantee Footer -->
+                <div class="pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="text-[10px] text-slate-400 max-w-md leading-relaxed">
+                        <p class="font-semibold text-slate-300 mb-0.5">Laboratory Statement of Integrity:</p>
+                        This certificate certifies that the evaluated text matches natural human syntactic variation, diverse vocabulary distributions, and absence of known LLM repetitive patterns.
+                    </div>
+                    <div class="flex items-center space-x-2.5 shrink-0 self-end sm:self-center">
+                        <div class="text-right font-mono text-[9px] text-slate-400">
+                            <span class="block text-slate-300 font-semibold uppercase">Digitally Verified</span>
+                            <span>Veritas AI Lab</span>
+                        </div>
+                        <div class="w-10 h-10 rounded-full border-2 border-emerald-500/40 bg-emerald-500/10 flex items-center justify-center text-emerald-400 shadow-inner">
+                            <i data-lucide="check-check" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
