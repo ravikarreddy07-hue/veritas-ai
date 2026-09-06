@@ -6,7 +6,7 @@ and converts formulaic syntax into authentic human-styled prose designed to scor
 
 import re
 import random
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import httpx
 from .linguistics import (
     split_sentences,
@@ -290,3 +290,105 @@ class AIHumanizer:
         except Exception:
             pass
         return None
+
+    def _remove_cliches(self, text: str, tone: str = "natural") -> Tuple[str, List[str]]:
+        changes = []
+        modified = text
+        for pattern, info in AI_CLICHE_PATTERNS.items():
+            regex = re.compile(pattern, re.IGNORECASE)
+            def replace_callback(match):
+                orig = match.group(0)
+                repl = info.get(tone, info.get("natural", "explore"))
+                return match_case(orig, repl)
+            if regex.search(modified):
+                modified = regex.sub(replace_callback, modified)
+                changes.append(f"Replaced trope '{info['desc']}'")
+        return modified, changes
+
+    def _replace_transitions(self, text: str, tone: str = "natural") -> str:
+        transitions = TRANSITION_REPLACEMENTS.get(tone, TRANSITION_REPLACEMENTS["natural"])
+        modified = text
+        for ai_term, repl_list in transitions:
+            pattern = re.compile(re.escape(ai_term), re.IGNORECASE)
+            if pattern.search(modified):
+                replacement = random.choice(repl_list)
+                if replacement == "":
+                    modified = pattern.sub("", modified).strip()
+                    modified = re.sub(r'(?<=[.!?]\s),', '', modified)
+                else:
+                    modified = pattern.sub(replacement, modified)
+        return modified
+
+    def _apply_contractions(self, text: str) -> str:
+        modified = text
+        for formal, contracted in CONTRACTIONS.items():
+            pattern = re.compile(formal)
+            if pattern.search(modified):
+                modified = pattern.sub(contracted, modified)
+        return modified
+
+    def reroll_sentence(self, sentence: str, tone: str = "natural") -> List[Dict[str, str]]:
+        """
+        Generates 3 distinct AI-resistant alternative phrasings for an individual sentence:
+        1. Natural & Conversational: Relaxes transitions, applies natural contractions and human idioms.
+        2. Academic & Structured: Enhances lexical entropy, sophisticated syntactic inversions, zero clichés.
+        3. Punchy & Concise: Shortens clauses, active voice, maximizes burstiness standard deviation.
+        """
+        clean_sent = sentence.strip()
+        if not clean_sent:
+            return []
+
+        # Remove existing clichés
+        de_cliched = self._remove_cliches(clean_sent, tone)[0]
+        
+        # 1. Natural / Conversational variant
+        natural_cand = self._apply_contractions(de_cliched)
+        natural_cand = self._replace_transitions(natural_cand, "natural")
+        natural_cand = re.sub(r'^(It is important to note that|It should be noted that)\s+', 'The key thing is, ', natural_cand, flags=re.IGNORECASE)
+        natural_cand = re.sub(r'^(In order to)\s+', 'To ', natural_cand, flags=re.IGNORECASE)
+        natural_cand = re.sub(r'\butilize\b', 'use', natural_cand, flags=re.IGNORECASE)
+        natural_cand = re.sub(r'\bdemonstrates?\b', 'shows', natural_cand, flags=re.IGNORECASE)
+        natural_cand = re.sub(r'\bfoster innovation\b', 'spark new ideas', natural_cand, flags=re.IGNORECASE)
+        if not re.search(r"[.!?]$", natural_cand):
+            natural_cand += "."
+
+        # 2. Academic / Structured variant
+        academic_cand = self._replace_transitions(de_cliched, "academic")
+        academic_cand = re.sub(r'\bshows\b', 'demonstrates', academic_cand, flags=re.IGNORECASE)
+        academic_cand = re.sub(r'\bbig\b', 'substantial', academic_cand, flags=re.IGNORECASE)
+        academic_cand = re.sub(r'\buse\b', 'employ', academic_cand, flags=re.IGNORECASE)
+        academic_cand = re.sub(r'\bhelps\b', 'facilitates', academic_cand, flags=re.IGNORECASE)
+        academic_cand = re.sub(r'^(In conclusion|In summary),', 'Taken in synthesis,', academic_cand, flags=re.IGNORECASE)
+        if not re.search(r"[.!?]$", academic_cand):
+            academic_cand += "."
+
+        # 3. Punchy / Concise variant
+        punchy_cand = de_cliched
+        punchy_cand = re.sub(r'\b(furthermore|moreover|additionally|consequently|subsequently|essentially|basically|clearly|obviously)\b,?\s*', '', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = re.sub(r'\b(in order to)\b', 'to', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = re.sub(r'\b(due to the fact that)\b', 'because', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = re.sub(r'\b(plays a (vital|crucial|key) role in)\b', 'drives', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = self._apply_contractions(punchy_cand)
+        punchy_cand = punchy_cand.strip()
+        if punchy_cand:
+            punchy_cand = punchy_cand[0].upper() + punchy_cand[1:]
+        if not re.search(r"[.!?]$", punchy_cand):
+            punchy_cand += "."
+
+        return [
+            {
+                "tone": "Conversational",
+                "text": natural_cand,
+                "rationale": "Natural cadence with contractions & conversational phrasing"
+            },
+            {
+                "tone": "Academic",
+                "text": academic_cand,
+                "rationale": "High lexical entropy with scholarly syntactic inversion"
+            },
+            {
+                "tone": "Punchy",
+                "text": punchy_cand,
+                "rationale": "Concise active voice maximizing burstiness variance"
+            }
+        ]

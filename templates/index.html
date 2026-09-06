@@ -37,6 +37,8 @@
     </script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Mammoth.js for Client-side DOCX Extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <!-- Custom Styles -->
     <link rel="stylesheet" href="/static/styles.css">
     <!-- Favicon -->
@@ -242,6 +244,10 @@
                                 <h3 class="font-semibold text-slate-200">1. Forensic AI Detector</h3>
                             </div>
                             <div class="flex items-center space-x-2">
+                                <input type="file" id="doc-upload-input" accept=".txt,.docx,.md,.doc" class="hidden" onchange="handleFileUpload(event)">
+                                <button onclick="document.getElementById('doc-upload-input').click()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1" title="Upload Word docx or text file">
+                                    <i data-lucide="file-up" class="w-3.5 h-3.5 text-indigo-400"></i> Upload
+                                </button>
                                 <button onclick="pasteToInput()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1" title="Paste from clipboard">
                                     <i data-lucide="clipboard" class="w-3.5 h-3.5"></i> Paste
                                 </button>
@@ -251,15 +257,18 @@
                             </div>
                         </div>
 
-                        <!-- Text Area Input -->
-                        <div class="relative flex-1">
+                        <!-- Text Area Input with Dropzone & Radar Beam Overlay -->
+                        <div class="relative flex-1 dropzone-container" id="dropzone-area">
                             <textarea
                                 id="input-text"
                                 rows="9"
-                                placeholder="Paste your text here to scan for robotic rhythm, uniform sentence lengths, and overused AI clichés..."
+                                placeholder="Paste or drag & drop documents (.docx, .txt) here to scan for robotic rhythm, uniform sentence lengths, and overused AI clichés..."
                                 class="w-full h-full min-h-[220px] bg-slate-900/70 border border-slate-700/80 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition resize-none leading-relaxed"
                                 oninput="updateWordCount()"
                             ></textarea>
+                            <div class="radar-scan-overlay">
+                                <div class="radar-beam" id="radar-beam-laser"></div>
+                            </div>
                         </div>
 
                         <!-- Input Meta & Action Row -->
@@ -278,6 +287,7 @@
                             >
                                 <i data-lucide="radar" class="w-4 h-4 text-indigo-200"></i>
                                 <span id="detect-btn-text">Detect AI Content</span>
+                                <kbd class="kbd-badge ml-1.5 hidden sm:inline-flex">Ctrl ↵</kbd>
                             </button>
                         </div>
 
@@ -432,10 +442,11 @@
                         >
                             <i data-lucide="sparkles" class="w-4 h-4 text-indigo-200"></i>
                             <span id="humanize-btn-text">Humanize Text Now</span>
+                            <kbd class="kbd-badge ml-1.5 hidden sm:inline-flex">Ctrl ↵</kbd>
                         </button>
 
                         <!-- Humanizer Output Section -->
-                        <div id="humanizer-results" class="mt-4 flex-1 flex flex-col hidden space-y-3">
+                        <div id="humanizer-results" class="mt-4 flex-1 flex flex-col hidden space-y-3.5">
                             
                             <!-- Before vs After Score Delta Banner -->
                             <div class="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-emerald-950/40 border border-emerald-500/30 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
@@ -451,19 +462,42 @@
                                 </span>
                             </div>
 
+                            <!-- Multi-Detector Bypass Calibration Simulator -->
+                            <div class="p-3 rounded-xl bg-slate-900/80 border border-white/[0.08] space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                                        Target Platform Bypass Calibration
+                                    </span>
+                                    <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+                                        Safe Tier (&lt;10% AI)
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center" id="detector-sim-grid">
+                                    <!-- Populated dynamically with Turnitin, GPTZero, CopyLeaks, Winston AI -->
+                                </div>
+                            </div>
+
                             <!-- Tab Header & Quick Copy -->
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-800 pb-2.5">
                                 <div class="flex space-x-3 text-xs">
                                     <button onclick="setOutputTab('clean')" id="tab-clean" class="font-semibold text-white border-b-2 border-indigo-400 pb-1 flex items-center gap-1">
-                                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Humanized Prose
+                                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Interactive Sentences
+                                    </button>
+                                    <button onclick="setOutputTab('raw')" id="tab-raw" class="font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1">
+                                        <i data-lucide="align-left" class="w-3.5 h-3.5"></i> Raw Text
                                     </button>
                                     <button onclick="setOutputTab('diff')" id="tab-diff" class="font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1">
                                         <i data-lucide="git-compare" class="w-3.5 h-3.5"></i> Diff Changes
                                     </button>
                                 </div>
-                                <div class="flex items-center justify-end space-x-2 text-xs">
+                                <div class="flex items-center justify-end space-x-1.5 sm:space-x-2 text-xs flex-wrap">
                                     <button onclick="copyOutput()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" id="copy-btn">
                                         <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
+                                    </button>
+                                    <button onclick="downloadDocx()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-500/20 transition flex items-center gap-1" title="Download as Microsoft Word document">
+                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i> .DOCX
                                     </button>
                                     <button onclick="downloadText()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" title="Download TXT">
                                         <i data-lucide="download" class="w-3.5 h-3.5"></i> .TXT
@@ -474,12 +508,18 @@
                                 </div>
                             </div>
 
-                            <!-- Clean Output View -->
-                            <div id="output-clean-view" class="relative flex-1 min-h-[160px]">
+                            <!-- Interactive Sentences Output View -->
+                            <div id="output-clean-view" class="relative flex-1 min-h-[160px] bg-slate-900/80 border border-slate-700 rounded-xl p-3.5 text-sm text-slate-200 leading-relaxed overflow-y-auto max-h-56">
+                                <!-- Populated dynamically with clickable sentence spans -->
+                            </div>
+
+                            <!-- Raw Output View (Textarea for manual copy/edit) -->
+                            <div id="output-raw-view" class="relative flex-1 min-h-[160px] hidden">
                                 <textarea
                                     id="output-text"
                                     rows="7"
                                     class="w-full h-full bg-slate-900/80 border border-slate-700 rounded-xl p-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
+                                    oninput="syncRawToInteractive()"
                                 ></textarea>
                             </div>
 
@@ -734,6 +774,26 @@
     <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 bg-slate-900/95 border border-white/[0.1] text-white text-xs px-4 py-2.5 rounded-xl shadow-2xl transition-all duration-300 flex items-center space-x-2 z-50 backdrop-blur-lg">
         <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
         <span id="toast-text">Copied to clipboard!</span>
+    </div>
+
+    <!-- Floating Sentence Reroll Popover -->
+    <div id="sentence-reroll-popover" class="hidden opacity-0 p-4">
+        <div class="flex items-center justify-between pb-2 mb-2.5 border-b border-white/[0.08]">
+            <span class="text-xs font-semibold text-white flex items-center gap-1.5 font-display">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400"></i>
+                Alternative Phrasings
+            </span>
+            <button onclick="closeRerollPopover()" class="text-slate-400 hover:text-white text-xs p-1 rounded hover:bg-slate-800 transition">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+        <p class="text-[11px] text-slate-400 mb-3 truncate italic font-mono px-1" id="popover-orig-sentence">"..."</p>
+        <div class="space-y-2" id="popover-variants-container">
+            <!-- Populated dynamically with Conversational, Academic, Punchy -->
+        </div>
+        <div class="mt-2.5 pt-2 border-t border-white/[0.06] text-[10px] text-slate-500 font-mono text-right">
+            Press <kbd class="kbd-badge">Esc</kbd> to close
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

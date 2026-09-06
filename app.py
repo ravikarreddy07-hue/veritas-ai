@@ -53,6 +53,10 @@ class HumanizeRequest(BaseModel):
     use_ollama: bool = Field(default=False, description="Whether to query local Ollama LLM")
     ollama_model: str = Field(default="llama3", description="Ollama model name")
 
+class RerollRequest(BaseModel):
+    sentence: str = Field(..., description="Single sentence to reroll into 3 alternative variations")
+    tone: str = Field(default="natural", description="Tone for the reroll")
+
 # Preloaded sample texts for instant testing
 SAMPLE_TEXTS = {
     "ai_essay": {
@@ -137,6 +141,20 @@ async def humanize_text(req: HumanizeRequest):
         "humanization": h_result,
         "humanized_analysis": humanized_analysis,
         "score_delta": original_analysis["ai_percentage"] - humanized_analysis["ai_percentage"]
+    })
+
+@app.post("/api/reroll")
+async def reroll_sentence_endpoint(req: RerollRequest):
+    """
+    Returns 3 distinct AI-resistant alternative phrasings for an individual sentence.
+    """
+    if not req.sentence.strip():
+        raise HTTPException(status_code=400, detail="Sentence cannot be empty.")
+    
+    variants = humanizer.reroll_sentence(req.sentence, tone=req.tone)
+    return JSONResponse(content={
+        "original": req.sentence,
+        "variants": variants
     })
 
 @app.get("/api/samples")
