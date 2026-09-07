@@ -140,6 +140,40 @@ function clearInput() {
 }
 
 // ================= 3. DRAG & DROP AND FILE PARSING (.PDF, .DOCX, .TXT, .MD) =================
+function readFileAsArrayBuffer(file) {
+    if (typeof file.arrayBuffer === 'function') {
+        return file.arrayBuffer().catch(() => readFileAsArrayBufferFallback(file));
+    }
+    return readFileAsArrayBufferFallback(file);
+}
+
+function readFileAsArrayBufferFallback(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read file as ArrayBuffer'));
+        reader.onabort = () => reject(new Error('File reading was aborted'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function readFileAsText(file) {
+    if (typeof file.text === 'function') {
+        return file.text().catch(() => readFileAsTextFallback(file));
+    }
+    return readFileAsTextFallback(file);
+}
+
+function readFileAsTextFallback(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read file as text'));
+        reader.onabort = () => reject(new Error('File reading was aborted'));
+        reader.readAsText(file);
+    });
+}
+
 function initDragAndDrop() {
     const dropzone = document.getElementById('dropzone-area');
     if (!dropzone) return;
@@ -160,87 +194,121 @@ function initDragAndDrop() {
         }, false);
     });
 
-    dropzone.addEventListener('drop', (e) => {
+    dropzone.addEventListener('drop', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         dropzone.classList.remove('dropzone-active');
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            processUploadedFile(e.dataTransfer.files[0]);
+            await processUploadedFile(e.dataTransfer.files[0]);
         }
     }, false);
 }
 
-function handleFileUpload(event) {
-    const file = event.target.files && event.target.files[0];
-    if (file) {
-        processUploadedFile(file);
+async function handleFileUpload(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    try {
+        await processUploadedFile(file);
+    } catch (err) {
+        console.error('Mobile/Desktop file processing error:', err);
+        showToast(`Could not open file: ${err.message || 'Unknown error'}`);
+    } finally {
+        // Essential for iOS Safari / Android: only clear the input after async parsing has fully resolved,
+        // preventing premature cancellation of the native file blob stream while allowing re-upload of the same file.
+        try {
+            input.value = '';
+        } catch (_) {}
     }
-    event.target.value = '';
 }
 
 async function processUploadedFile(file) {
     const fileName = file.name || 'document';
-    const ext = fileName.split('.').pop().toLowerCase();
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const mime = (file.type || '').toLowerCase();
+
     showToast(`Reading ${fileName}...`);
 
     try {
-        if (ext === 'pdf') {
+        const isPdf = ext === 'pdf' || mime === 'application/pdf';
+        const isDocx = ext === 'docx' || ext === 'doc' || mime.includes('wordprocessingml') || mime.includes('msword') || mime.includes('officedocument');
+
+        if (isPdf) {
             if (typeof pdfjsLib === 'undefined') {
-                showToast('PDF parser is initializing, please retry in a moment.');
+                showToast('PDF reader library is loading, please try again in a moment.');
                 return;
             }
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            const arrayBuffer = await file.arrayBuffer();
-            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            try {
+                if (pdfjsLib.GlobalWorkerOptions) {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                }
+            } catch (wErr) {
+                console.warn('PDF.js worker initialization notice:', wErr);
+            }
+
+            const rawBuffer = await readFileAsArrayBuffer(file);
+            const uint8Data = new Uint8Array(rawBuffer);
+            const loadingTask = pdfjsLib.getDocument({ data: uint8Data });
             const pdfDoc = await loadingTask.promise;
+
             let fullText = '';
             for (let i = 1; i <= pdfDoc.numPages; i++) {
-                const page = await pdfDoc.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                fullText += pageText + '\n\n';
+                try {
+                    const page = await pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n\n';
+                } catch (pageErr) {
+                    console.warn(`Could not extract page ${i}:`, pageErr);
+                }
             }
             fullText = fullText.trim();
             if (!fullText) {
-                showToast('Could not extract text from PDF (may be scanned image).');
+                showToast('Could not extract text from PDF (it may contain scanned images rather than text).');
                 return;
             }
-            document.getElementById('input-text').value = fullText;
-            updateWordCount();
-            runDetection();
-            showToast(`Loaded ${fileName} (${pdfDoc.numPages} pages, ${document.getElementById('word-count-badge').textContent})`);
-        } else if (ext === 'docx') {
+            applyExtractedText(fullText, `Loaded ${fileName} (${pdfDoc.numPages} pages)`);
+        } else if (isDocx) {
             if (typeof mammoth === 'undefined') {
-                showToast('Word parser loading, please retry in a moment.');
+                showToast('Word document reader is loading, please try again in a moment.');
                 return;
             }
-            const arrayBuffer = await file.arrayBuffer();
-            const result = await mammoth.extractRawText({ arrayBuffer });
-            const text = result.value ? result.value.trim() : '';
+            const rawBuffer = await readFileAsArrayBuffer(file);
+            const result = await mammoth.extractRawText({ arrayBuffer: rawBuffer });
+            const text = (result && result.value) ? result.value.trim() : '';
             if (!text) {
                 showToast('Could not extract readable text from .docx file.');
                 return;
             }
-            document.getElementById('input-text').value = text;
-            updateWordCount();
-            runDetection();
-            showToast(`Loaded ${fileName} (${document.getElementById('word-count-badge').textContent})`);
+            applyExtractedText(text, `Loaded ${fileName}`);
         } else {
-            // Text, markdown, etc.
-            const text = await file.text();
-            if (!text.trim()) {
-                showToast('Uploaded file is empty.');
+            // Text, markdown, or generic plain text
+            const text = await readFileAsText(file);
+            const trimmed = (text || '').trim();
+            if (!trimmed) {
+                showToast('The selected file is empty.');
                 return;
             }
-            document.getElementById('input-text').value = text.trim();
-            updateWordCount();
-            runDetection();
-            showToast(`Loaded ${fileName} (${document.getElementById('word-count-badge').textContent})`);
+            applyExtractedText(trimmed, `Loaded ${fileName}`);
         }
     } catch (err) {
         console.error('File parsing error:', err);
-        showToast(`Failed to parse ${fileName}: ${err.message}`);
+        showToast(`Failed to parse ${fileName}: ${err.message || 'Unsupported format'}`);
     }
+}
+
+function applyExtractedText(text, successMessage) {
+    const inputArea = document.getElementById('input-text');
+    if (!inputArea) return;
+    inputArea.value = text;
+    // Dispatch input event for auto-resizing, UI listeners, etc.
+    inputArea.dispatchEvent(new Event('input', { bubbles: true }));
+    updateWordCount();
+    runDetection();
+    const wordBadge = document.getElementById('word-count-badge');
+    const badgeText = wordBadge ? ` (${wordBadge.textContent})` : '';
+    showToast(`${successMessage}${badgeText}`);
 }
 
 // ================= 4. TONE & INTENSITY CONTROLLERS =================
