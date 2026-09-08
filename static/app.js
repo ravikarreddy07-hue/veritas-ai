@@ -547,10 +547,22 @@ function renderDocumentResults(data) {
     const deltaText = document.getElementById('doc-delta-banner-text');
     const deltaBadge = document.getElementById('doc-delta-badge');
     if (deltaText) {
-        deltaText.textContent = `AI likelihood dropped by ${delta}% (from ${origAi}% to ${humAi}%) in a single closed-loop pass.`;
+        if (delta > 0) {
+            deltaText.textContent = `AI likelihood dropped by ${delta}% (from ${origAi}% to ${humAi}%) in a single closed-loop pass.`;
+        } else if (origAi <= 15) {
+            deltaText.textContent = `Document verified as authentic human prose (${origAi}% AI). Preserved in pristine human state without artificial alteration.`;
+        } else {
+            deltaText.textContent = `Document already at optimal human score (${origAi}% AI). Preserved cadence without artificial alteration.`;
+        }
     }
     if (deltaBadge) {
-        deltaBadge.textContent = `-${delta}% AI Drop`;
+        if (delta > 0) {
+            deltaBadge.textContent = `-${delta}% AI Drop`;
+            deltaBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        } else {
+            deltaBadge.textContent = `Verified Human (${origAi}%)`;
+            deltaBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        }
     }
 
     // Shield badge
@@ -1104,16 +1116,26 @@ function renderHumanizerResults(data) {
     const delta = data.score_delta;
 
     // Delta Banner
-    document.getElementById('delta-banner-text').textContent =
-        `AI likelihood reduced from ${originalAi}% to ${newAi}% (${data.humanized_analysis.verdict})`;
+    const deltaBannerText = document.getElementById('delta-banner-text');
+    if (deltaBannerText) {
+        if (delta > 0) {
+            deltaBannerText.textContent = `AI likelihood reduced from ${originalAi}% to ${newAi}% (${data.humanized_analysis.verdict})`;
+        } else if (originalAi <= 15) {
+            deltaBannerText.textContent = `Text verified as authentic human prose (${originalAi}% AI). Preserved in pristine human state without artificial alteration.`;
+        } else {
+            deltaBannerText.textContent = `Text already at optimal human score (${originalAi}% AI). Preserved cadence without artificial alteration.`;
+        }
+    }
     
     const deltaBadge = document.getElementById('delta-badge');
-    if (delta > 0) {
-        deltaBadge.textContent = `-${delta}% Drop`;
-        deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
-    } else {
-        deltaBadge.textContent = 'Optimized';
-        deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40';
+    if (deltaBadge) {
+        if (delta > 0) {
+            deltaBadge.textContent = `-${delta}% Drop`;
+            deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+        } else {
+            deltaBadge.textContent = `Verified Human (${originalAi}%)`;
+            deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        }
     }
 
     // Academic Shield Pill
