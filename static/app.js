@@ -22,6 +22,14 @@ let animationFrameId = null;
 let lastDetectionData = null;
 let lastHumanizerData = null;
 
+// Document Studio State
+let currentDocFile = null;
+let currentDocData = null;
+let isDocProcessing = false;
+let docTone = 'natural';
+let docIntensity = 'balanced';
+let docPreviewTab = 'clean';
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
@@ -174,34 +182,521 @@ function readFileAsTextFallback(file) {
     });
 }
 
-function initDragAndDrop() {
-    const dropzone = document.getElementById('dropzone-area');
-    if (!dropzone) return;
+function switchStudioMode(mode) {
+    const docView = document.getElementById('studio-document-view');
+    const textView = document.getElementById('studio-text-view');
+    const docTab = document.getElementById('mode-tab-doc');
+    const textTab = document.getElementById('mode-tab-text');
+    if (!docView || !textView) return;
 
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropzone.addEventListener(eventName, (e) => {
+    if (mode === 'document') {
+        docView.classList.remove('hidden');
+        textView.classList.add('hidden');
+        if (docTab) {
+            docTab.className = 'px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 bg-indigo-600 text-white shadow-sm';
+        }
+        if (textTab) {
+            textTab.className = 'px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-slate-400 hover:text-slate-200';
+        }
+    } else {
+        docView.classList.add('hidden');
+        textView.classList.remove('hidden');
+        if (docTab) {
+            docTab.className = 'px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-slate-400 hover:text-slate-200';
+        }
+        if (textTab) {
+            textTab.className = 'px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 bg-indigo-600 text-white shadow-sm';
+        }
+    }
+    lucide.createIcons();
+}
+
+function setDocTone(tone) {
+    docTone = tone;
+    document.querySelectorAll('.doc-tone-btn').forEach(btn => btn.classList.remove('control-btn-active'));
+    const activeBtn = document.getElementById(`doc-tone-${tone}`);
+    if (activeBtn) activeBtn.classList.add('control-btn-active');
+}
+
+function setDocIntensity(intensity) {
+    docIntensity = intensity;
+    document.querySelectorAll('.doc-int-btn').forEach(btn => btn.classList.remove('control-btn-active'));
+    const activeBtn = document.getElementById(`doc-int-${intensity}`);
+    if (activeBtn) activeBtn.classList.add('control-btn-active');
+    const desc = document.getElementById('doc-intensity-desc');
+    if (desc) {
+        if (intensity === 'mild') {
+            desc.textContent = 'Mild: Subtle pacing and vocabulary tweaks preserving near-exact syntax.';
+        } else if (intensity === 'balanced') {
+            desc.textContent = 'Balanced: Removes clichés, breaks compound clauses, and drops AI score < 15%.';
+        } else {
+            desc.textContent = 'Stealth: Maximum burstiness injection and complete cadence restructuring for < 10% AI score.';
+        }
+    }
+}
+
+function initDragAndDrop() {
+    // 1. Primary Document Studio Dropzone
+    const docDropzone = document.getElementById('doc-upload-area');
+    if (docDropzone) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            docDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                docDropzone.classList.add('doc-dropzone-active');
+            }, false);
+        });
+
+        ['dragleave', 'dragend'].forEach(eventName => {
+            docDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                docDropzone.classList.remove('doc-dropzone-active');
+            }, false);
+        });
+
+        docDropzone.addEventListener('drop', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            dropzone.classList.add('dropzone-active');
+            docDropzone.classList.remove('doc-dropzone-active');
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const fakeEvent = { target: { files: e.dataTransfer.files } };
+                handlePrimaryFileUpload(fakeEvent);
+            }
         }, false);
-    });
+    }
 
-    ['dragleave', 'dragend'].forEach(eventName => {
-        dropzone.addEventListener(eventName, (e) => {
+    // 2. Direct Text Studio Dropzone (Quick paste dropzone)
+    const dropzone = document.getElementById('dropzone-area');
+    if (dropzone) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.add('dropzone-active');
+            }, false);
+        });
+
+        ['dragleave', 'dragend'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('dropzone-active');
+            }, false);
+        });
+
+        dropzone.addEventListener('drop', async (e) => {
             e.preventDefault();
             e.stopPropagation();
             dropzone.classList.remove('dropzone-active');
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                await processUploadedFile(e.dataTransfer.files[0]);
+            }
         }, false);
-    });
+    }
+}
 
-    dropzone.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropzone.classList.remove('dropzone-active');
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            await processUploadedFile(e.dataTransfer.files[0]);
+function handlePrimaryFileUpload(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+        showToast('File is too large. Maximum size is 15MB.');
+        try { input.value = ''; } catch (_) {}
+        return;
+    }
+
+    currentDocFile = file;
+    const fileName = file.name || 'document';
+    const ext = (fileName.split('.').pop() || 'doc').toUpperCase();
+
+    // Format readable size
+    let sizeStr = '';
+    if (file.size < 1024) {
+        sizeStr = `${file.size} B`;
+    } else if (file.size < 1024 * 1024) {
+        sizeStr = `${(file.size / 1024).toFixed(1)} KB`;
+    } else {
+        sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    const filenameEl = document.getElementById('doc-active-filename');
+    const filesizeEl = document.getElementById('doc-active-filesize');
+    const badgeEl = document.getElementById('doc-active-format-badge');
+
+    if (filenameEl) filenameEl.textContent = fileName;
+    if (filesizeEl) filesizeEl.textContent = sizeStr;
+    if (badgeEl) badgeEl.textContent = ext;
+
+    const uploadArea = document.getElementById('doc-upload-area');
+    const activeCard = document.getElementById('doc-active-card');
+    const resultsDashboard = document.getElementById('doc-results-dashboard');
+    const errorBox = document.getElementById('doc-error-box');
+
+    if (uploadArea) uploadArea.classList.add('hidden');
+    if (activeCard) activeCard.classList.remove('hidden');
+    if (resultsDashboard) resultsDashboard.classList.add('hidden');
+    if (errorBox) errorBox.classList.add('hidden');
+
+    try { input.value = ''; } catch (_) {}
+    lucide.createIcons();
+    showToast(`Loaded "${fileName}" — ready to humanize.`);
+}
+
+function removeSelectedDocument() {
+    currentDocFile = null;
+    currentDocData = null;
+    const uploadArea = document.getElementById('doc-upload-area');
+    const activeCard = document.getElementById('doc-active-card');
+    const processingState = document.getElementById('doc-processing-state');
+    const resultsDashboard = document.getElementById('doc-results-dashboard');
+    const errorBox = document.getElementById('doc-error-box');
+    const fileInput = document.getElementById('primary-doc-upload-input');
+
+    if (uploadArea) uploadArea.classList.remove('hidden');
+    if (activeCard) activeCard.classList.add('hidden');
+    if (processingState) processingState.classList.add('hidden');
+    if (resultsDashboard) resultsDashboard.classList.add('hidden');
+    if (errorBox) errorBox.classList.add('hidden');
+    if (fileInput) {
+        try { fileInput.value = ''; } catch (_) {}
+    }
+    lucide.createIcons();
+}
+
+function resetDocumentStudio() {
+    removeSelectedDocument();
+    showToast('Ready for a new document upload.');
+}
+
+function dismissDocError() {
+    const errorBox = document.getElementById('doc-error-box');
+    if (errorBox) errorBox.classList.add('hidden');
+}
+
+async function startDocumentProcessing() {
+    if (isDocProcessing) return;
+    if (!currentDocFile) {
+        showToast('Please select or upload a document first');
+        return;
+    }
+
+    isDocProcessing = true;
+    const processBtn = document.getElementById('doc-process-btn');
+    const processBtnText = document.getElementById('doc-process-btn-text');
+    const errorBox = document.getElementById('doc-error-box');
+    const processingState = document.getElementById('doc-processing-state');
+    const resultsDashboard = document.getElementById('doc-results-dashboard');
+
+    if (processBtn) processBtn.disabled = true;
+    if (processBtnText) processBtnText.textContent = 'Processing Document...';
+    if (errorBox) errorBox.classList.add('hidden');
+    if (resultsDashboard) resultsDashboard.classList.add('hidden');
+    if (processingState) processingState.classList.remove('hidden');
+
+    function updateProgress(step, percent, statusText) {
+        const percentEl = document.getElementById('doc-processing-percentage');
+        const fillEl = document.getElementById('doc-progress-bar-fill');
+        const textEl = document.getElementById('doc-processing-status-text');
+        if (percentEl) percentEl.textContent = `${percent}%`;
+        if (fillEl) fillEl.style.width = `${percent}%`;
+        if (textEl) textEl.textContent = statusText;
+
+        for (let i = 1; i <= 7; i++) {
+            const stepEl = document.getElementById(`step-${i}`);
+            if (!stepEl) continue;
+            if (i < step) {
+                stepEl.className = 'step-item step-completed';
+            } else if (i === step) {
+                stepEl.className = 'step-item step-active';
+            } else {
+                stepEl.className = 'step-item step-pending';
+            }
         }
-    }, false);
+    }
+
+    updateProgress(1, 15, 'Uploading document to secure in-memory pipeline...');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', currentDocFile);
+        formData.append('tone', docTone);
+        formData.append('intensity', docIntensity);
+        const shieldCheck = document.getElementById('doc-academic-shield-check');
+        formData.append('academic_shield', shieldCheck ? shieldCheck.checked : true);
+
+        // Progress step timer during network request
+        let progressStep = 1;
+        const progressTimer = setInterval(() => {
+            if (progressStep === 1) {
+                progressStep = 2;
+                updateProgress(2, 30, 'Extracting text and preserving layout structure...');
+            } else if (progressStep === 2) {
+                progressStep = 3;
+                updateProgress(3, 48, 'Performing pre-humanization forensic AI analysis...');
+            } else if (progressStep === 3) {
+                progressStep = 4;
+                updateProgress(4, 68, 'Humanizing paragraphs with syntactic cadence restructuring...');
+            } else if (progressStep === 4) {
+                progressStep = 5;
+                updateProgress(5, 84, 'Re-analyzing humanized document against forensic models...');
+            }
+        }, 550);
+
+        const response = await fetch('/api/document/process', {
+            method: 'POST',
+            body: formData
+        });
+
+        clearInterval(progressTimer);
+
+        if (!response.ok) {
+            let errorMsg = 'Failed to process document';
+            try {
+                const errData = await response.json();
+                if (errData && errData.detail) {
+                    errorMsg = errData.detail;
+                }
+            } catch (_) {}
+            throw new Error(errorMsg);
+        }
+
+        updateProgress(6, 95, 'Generating downloadable binary documents (PDF, DOCX, TXT)...');
+        const data = await response.json();
+        currentDocData = data;
+
+        await new Promise(r => setTimeout(r, 350));
+        updateProgress(7, 100, 'Document processed successfully!');
+        await new Promise(r => setTimeout(r, 250));
+
+        renderDocumentResults(data);
+
+        if (processingState) processingState.classList.add('hidden');
+        if (resultsDashboard) {
+            resultsDashboard.classList.remove('hidden');
+            resultsDashboard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        showToast('Document humanized successfully!');
+
+    } catch (err) {
+        console.error('Document processing failure:', err);
+        if (processingState) processingState.classList.add('hidden');
+        if (errorBox) {
+            errorBox.classList.remove('hidden');
+            const errText = document.getElementById('doc-error-text');
+            if (errText) errText.textContent = err.message || 'An error occurred during processing.';
+        }
+        showToast(`Document error: ${err.message || 'Processing failed'}`);
+    } finally {
+        isDocProcessing = false;
+        if (processBtn) processBtn.disabled = false;
+        if (processBtnText) processBtnText.textContent = 'Humanize Document & Detect AI';
+        lucide.createIcons();
+    }
+}
+
+function renderDocumentResults(data) {
+    const origAi = data.original_analysis.ai_percentage;
+    const origHuman = Math.max(0, 100 - origAi);
+    const humAi = data.humanized_analysis.ai_percentage;
+    const humHuman = Math.max(0, 100 - humAi);
+    const delta = data.score_delta;
+
+    // Original Card
+    const origAiEl = document.getElementById('doc-orig-ai-score');
+    const origHumanEl = document.getElementById('doc-orig-human-score');
+    const origRatioBar = document.getElementById('doc-orig-ratio-bar');
+    const origVerdict = document.getElementById('doc-orig-verdict-badge');
+    const origExpl = document.getElementById('doc-orig-expl');
+
+    if (origAiEl) origAiEl.textContent = `${origAi}%`;
+    if (origHumanEl) origHumanEl.textContent = `${origHuman}%`;
+    if (origRatioBar) origRatioBar.style.width = `${origAi}%`;
+    if (origVerdict) {
+        origVerdict.textContent = data.original_analysis.verdict || (origAi > 50 ? 'Likely AI' : 'Human-Like');
+        if (origAi > 50) {
+            origVerdict.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20';
+        } else {
+            origVerdict.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+        }
+    }
+    if (origExpl && data.original_analysis.explanation) {
+        origExpl.textContent = data.original_analysis.explanation;
+    }
+
+    // Humanized Card
+    const humAiEl = document.getElementById('doc-humanized-ai-score');
+    const humHumanEl = document.getElementById('doc-humanized-human-score');
+    const humRatioBar = document.getElementById('doc-humanized-ratio-bar');
+    const humVerdict = document.getElementById('doc-humanized-verdict-badge');
+    const humExpl = document.getElementById('doc-humanized-expl');
+
+    if (humAiEl) humAiEl.textContent = `${humAi}%`;
+    if (humHumanEl) humHumanEl.textContent = `${humHuman}%`;
+    if (humRatioBar) humRatioBar.style.width = `${humHuman}%`;
+    if (humVerdict) {
+        humVerdict.textContent = data.humanized_analysis.verdict || (humAi <= 15 ? 'Verified Human' : 'Human-Like');
+        humVerdict.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+    }
+    if (humExpl && data.humanized_analysis.explanation) {
+        humExpl.textContent = data.humanized_analysis.explanation;
+    }
+
+    // Delta banner
+    const deltaText = document.getElementById('doc-delta-banner-text');
+    const deltaBadge = document.getElementById('doc-delta-badge');
+    if (deltaText) {
+        deltaText.textContent = `AI likelihood dropped by ${delta}% (from ${origAi}% to ${humAi}%) in a single closed-loop pass.`;
+    }
+    if (deltaBadge) {
+        deltaBadge.textContent = `-${delta}% AI Drop`;
+    }
+
+    // Shield badge
+    const shieldBadge = document.getElementById('doc-shield-badge');
+    if (shieldBadge) {
+        const count = data.humanization.shielded_items_count || 0;
+        shieldBadge.textContent = count > 0 ? `🛡️ ${count} Citations Protected` : '🛡️ Citations Protected';
+    }
+
+    // Metadata
+    const metaFilename = document.getElementById('doc-meta-filename');
+    const metaWords = document.getElementById('doc-meta-words');
+    const metaChars = document.getElementById('doc-meta-chars');
+    const metaPages = document.getElementById('doc-meta-pages');
+
+    if (metaFilename) metaFilename.textContent = data.filename || (currentDocFile ? currentDocFile.name : 'document');
+    if (metaWords) metaWords.textContent = `${data.word_count || 0} words`;
+    if (metaChars) metaChars.textContent = `${data.character_count || 0} chars`;
+    if (metaPages) metaPages.textContent = `${data.estimated_pages || 1} page${(data.estimated_pages || 1) > 1 ? 's' : ''}`;
+
+    // Clean Formatted Preview View
+    const cleanView = document.getElementById('doc-view-clean');
+    if (cleanView) {
+        const paragraphs = (data.humanization.humanized_text || '').split(/\n\n+/);
+        cleanView.innerHTML = paragraphs.map(p => {
+            const trimmed = p.trim();
+            if (!trimmed) return '';
+            if (trimmed.startsWith('# ') || trimmed.startsWith('## ') || trimmed.startsWith('### ')) {
+                const headingText = trimmed.replace(/^#+\s*/, '');
+                return `<h4 class="text-base font-bold text-white mt-3 mb-1 font-display">${escapeHtml(headingText)}</h4>`;
+            }
+            return `<p class="text-sm leading-relaxed text-slate-200 mb-2.5">${escapeHtml(trimmed)}</p>`;
+        }).join('');
+    }
+
+    // Raw View
+    const rawTextarea = document.getElementById('doc-raw-textarea');
+    if (rawTextarea) {
+        rawTextarea.value = data.humanization.humanized_text || '';
+    }
+
+    // Diff View
+    const diffView = document.getElementById('doc-view-diff');
+    if (diffView) {
+        diffView.innerHTML = generateDocumentDiffHtml(data.humanization.original_text, data.humanization.humanized_text);
+    }
+
+    // Primary download button label
+    const primaryLabel = document.getElementById('doc-primary-download-label');
+    if (primaryLabel) {
+        const fmt = (data.output_format || 'docx').toUpperCase();
+        primaryLabel.textContent = `Download Humanized .${fmt}`;
+    }
+
+    setDocPreviewTab('clean');
+    lucide.createIcons();
+}
+
+function generateDocumentDiffHtml(original, humanized) {
+    if (!original || !humanized) return '<p class="text-slate-400">No diff available</p>';
+    const origWords = original.split(/\s+/);
+    const newWords = humanized.split(/\s+/);
+    let html = '';
+    let i = 0, j = 0;
+    const maxWords = 1500;
+    while ((i < origWords.length || j < newWords.length) && (i < maxWords && j < maxWords)) {
+        if (i < origWords.length && j < newWords.length && origWords[i].toLowerCase() === newWords[j].toLowerCase()) {
+            html += `${escapeHtml(newWords[j])} `;
+            i++;
+            j++;
+        } else {
+            if (i < origWords.length) {
+                html += `<del class="diff-del text-rose-400/80 line-through bg-rose-500/10 px-0.5 rounded">${escapeHtml(origWords[i])}</del> `;
+                i++;
+            }
+            if (j < newWords.length) {
+                html += `<ins class="diff-ins text-emerald-400 no-underline bg-emerald-500/10 px-0.5 rounded font-medium">${escapeHtml(newWords[j])}</ins> `;
+                j++;
+            }
+        }
+    }
+    if (origWords.length > maxWords || newWords.length > maxWords) {
+        html += '<p class="text-xs text-slate-500 mt-2 italic">[Diff preview truncated for performance]</p>';
+    }
+    return html.trim();
+}
+
+function setDocPreviewTab(tab) {
+    docPreviewTab = tab;
+    const cleanView = document.getElementById('doc-view-clean');
+    const diffView = document.getElementById('doc-view-diff');
+    const rawView = document.getElementById('doc-view-raw');
+
+    const tabClean = document.getElementById('doc-tab-clean');
+    const tabDiff = document.getElementById('doc-tab-diff');
+    const tabRaw = document.getElementById('doc-tab-raw');
+
+    if (cleanView) cleanView.classList.add('hidden');
+    if (diffView) diffView.classList.add('hidden');
+    if (rawView) rawView.classList.add('hidden');
+
+    const inactiveClass = 'font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1';
+    const activeClass = 'font-semibold text-white border-b-2 border-indigo-400 pb-1 flex items-center gap-1';
+
+    if (tabClean) tabClean.className = inactiveClass;
+    if (tabDiff) tabDiff.className = inactiveClass;
+    if (tabRaw) tabRaw.className = inactiveClass;
+
+    if (tab === 'clean') {
+        if (cleanView) cleanView.classList.remove('hidden');
+        if (tabClean) tabClean.className = activeClass;
+    } else if (tab === 'diff') {
+        if (diffView) diffView.classList.remove('hidden');
+        if (tabDiff) tabDiff.className = activeClass;
+    } else if (tab === 'raw') {
+        if (rawView) rawView.classList.remove('hidden');
+        if (tabRaw) tabRaw.className = activeClass;
+    }
+    lucide.createIcons();
+}
+
+async function copyDocOutput() {
+    if (!currentDocData || !currentDocData.humanization || !currentDocData.humanization.humanized_text) {
+        showToast('No document text to copy');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(currentDocData.humanization.humanized_text);
+        showToast('Humanized document text copied to clipboard!');
+    } catch (err) {
+        showToast('Please select and copy manually');
+    }
+}
+
+function triggerDocDownload(format) {
+    if (!currentDocData || !currentDocData.doc_id) {
+        showToast('No processed document available to download');
+        return;
+    }
+    const targetFmt = (format === 'default') ? (currentDocData.output_format || 'docx') : format;
+    window.location.href = `/api/document/download/${currentDocData.doc_id}?format=${targetFmt}`;
+    showToast(`Downloading ${targetFmt.toUpperCase()} document...`);
+}
+
+function openDocAuditCertificate() {
+    openAuditCertificate('document');
 }
 
 async function handleFileUpload(event) {
@@ -629,6 +1124,39 @@ function renderHumanizerResults(data) {
         }
     }
 
+    // Direct Text Authentic Before / After AI Ratio Cards
+    const textOrigVerdict = document.getElementById('text-orig-verdict');
+    const textOrigScore = document.getElementById('text-orig-score');
+    const textOrigAiSub = document.getElementById('text-orig-ai-sub');
+    const textOrigHumanSub = document.getElementById('text-orig-human-sub');
+
+    const textHumVerdict = document.getElementById('text-hum-verdict');
+    const textHumScore = document.getElementById('text-hum-score');
+    const textHumAiSub = document.getElementById('text-hum-ai-sub');
+    const textHumHumanSub = document.getElementById('text-hum-human-sub');
+
+    if (textOrigScore && textHumScore) {
+        textOrigScore.textContent = `${originalAi}%`;
+        if (textOrigAiSub) textOrigAiSub.textContent = `${originalAi}%`;
+        if (textOrigHumanSub) textOrigHumanSub.textContent = `${Math.max(0, 100 - originalAi)}%`;
+        if (textOrigVerdict) {
+            textOrigVerdict.textContent = data.original_analysis.verdict || (originalAi > 50 ? 'Likely AI' : 'Human-Like');
+            if (originalAi > 50) {
+                textOrigVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-rose-400 bg-rose-500/10';
+            } else {
+                textOrigVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-amber-400 bg-amber-500/10';
+            }
+        }
+
+        textHumScore.textContent = `${newAi}%`;
+        if (textHumAiSub) textHumAiSub.textContent = `${newAi}%`;
+        if (textHumHumanSub) textHumHumanSub.textContent = `${Math.max(0, 100 - newAi)}%`;
+        if (textHumVerdict) {
+            textHumVerdict.textContent = data.humanized_analysis.verdict || (newAi <= 15 ? 'Verified Human' : 'Human-Like');
+            textHumVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-emerald-300 bg-emerald-500/20';
+        }
+    }
+
     // Render Multi-Detector Bypass Simulator
     renderBypassSimulator(newAi);
 
@@ -992,6 +1520,22 @@ function downloadText() {
     showToast('Downloaded text file!');
 }
 
+function downloadTextDoc(format) {
+    if (lastHumanizerData && lastHumanizerData.doc_id) {
+        window.location.href = `/api/document/download/${lastHumanizerData.doc_id}?format=${format}`;
+        showToast(`Downloading humanized ${format.toUpperCase()} document...`);
+        return;
+    }
+    if (format === 'docx') {
+        downloadDocx();
+    } else if (format === 'txt') {
+        downloadText();
+    } else if (format === 'pdf') {
+        showToast('Tip: Use "Upload & Humanize Document" for high-fidelity binary PDF export.');
+        window.print();
+    }
+}
+
 function sendToDetector() {
     const text = document.getElementById('output-text').value;
     if (!text) return;
@@ -1032,7 +1576,15 @@ async function openAuditCertificate(source) {
     let cliches = '0';
     let isShielded = 'Active';
 
-    if (source === 'humanizer' && lastHumanizerData) {
+    if (source === 'document' && currentDocData) {
+        targetText = currentDocData.humanization.humanized_text;
+        aiProb = currentDocData.humanized_analysis.ai_percentage;
+        burstiness = currentDocData.humanized_analysis.metrics.burstiness_index;
+        ttr = `${currentDocData.humanized_analysis.metrics.vocabulary_ttr}%`;
+        cliches = currentDocData.humanized_analysis.metrics.cliche_count;
+        const count = currentDocData.humanization.shielded_items_count || 0;
+        isShielded = count > 0 ? `${count} Protected` : 'Active';
+    } else if (source === 'humanizer' && lastHumanizerData) {
         targetText = lastHumanizerData.humanization.humanized_text;
         aiProb = lastHumanizerData.humanized_analysis.ai_percentage;
         burstiness = lastHumanizerData.humanized_analysis.metrics.burstiness_index;

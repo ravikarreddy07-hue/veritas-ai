@@ -210,12 +210,426 @@
 
                 <div class="p-3.5 sm:p-6 bg-slate-950/60">
 
-                    <!-- Preset Sample Pills Bar -->
-                    <div class="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-900/80 p-2.5 sm:p-3 rounded-xl border border-white/[0.06]">
-                        <div class="flex items-center space-x-2 text-xs font-medium text-slate-300 shrink-0">
-                            <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
-                            <span>Load Benchmark Sample:</span>
+                    <!-- Studio Mode Switcher Bar -->
+                    <div class="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
+                        <div class="inline-flex p-1 bg-slate-900/90 rounded-xl border border-slate-800 self-start sm:self-auto shadow-sm">
+                            <button
+                                id="mode-tab-doc"
+                                type="button"
+                                onclick="switchStudioMode('document')"
+                                class="px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-2 bg-indigo-600 text-white shadow-sm"
+                            >
+                                <i data-lucide="file-up" class="w-4 h-4 text-indigo-200"></i>
+                                <span>Upload & Humanize Document</span>
+                                <span class="hidden md:inline text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-100 ml-1">PDF • DOCX • TXT</span>
+                            </button>
+                            <button
+                                id="mode-tab-text"
+                                type="button"
+                                onclick="switchStudioMode('text')"
+                                class="px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-slate-400 hover:text-slate-200"
+                            >
+                                <i data-lucide="align-left" class="w-4 h-4 text-slate-400"></i>
+                                <span>Direct Text Studio</span>
+                            </button>
                         </div>
+                        <div class="flex items-center gap-2 sm:gap-3 text-xs text-slate-400">
+                            <span class="flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+                                Institutional Grade (&lt;10% AI Target)
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- ================= 1. DOCUMENT FILE HUMANIZER VIEW ================= -->
+                    <div id="studio-document-view" class="space-y-6">
+
+                        <!-- Step 1: Upload Dropzone Area (Visible when no active file or results) -->
+                        <div id="doc-upload-area" class="doc-dropzone rounded-2xl p-8 sm:p-12 text-center relative group select-none">
+                            <input
+                                type="file"
+                                id="primary-doc-upload-input"
+                                accept=".pdf,.docx,.doc,.txt,.md,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+                                class="sr-only opacity-0 absolute pointer-events-none -z-10"
+                                tabindex="-1"
+                                onchange="handlePrimaryFileUpload(event)"
+                            >
+                            <div class="max-w-md mx-auto flex flex-col items-center">
+                                <div class="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center mb-4 group-hover:scale-105 transition shadow-lg shadow-indigo-600/10">
+                                    <i data-lucide="file-up" class="w-8 h-8 text-indigo-400"></i>
+                                </div>
+                                <h3 class="text-xl sm:text-2xl font-bold text-white mb-2 font-display">Upload your document</h3>
+                                <p class="text-xs sm:text-sm text-slate-400 mb-5 leading-relaxed">
+                                    Drag and drop your document here, or browse from your computer or phone. Headings, paragraphs, spacing, and citations are preserved.
+                                </p>
+                                <div class="flex flex-wrap items-center justify-center gap-2 mb-6">
+                                    <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-medium doc-badge-pdf">PDF</span>
+                                    <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-medium doc-badge-docx">DOC / DOCX</span>
+                                    <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-medium doc-badge-txt">TXT / MD</span>
+                                    <span class="text-xs text-slate-500">• Max 15MB</span>
+                                </div>
+                                <label
+                                    for="primary-doc-upload-input"
+                                    class="cursor-pointer btn-primary-luxury px-6 py-3 rounded-xl font-semibold text-sm text-white transition flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
+                                >
+                                    <i data-lucide="folder-open" class="w-4 h-4 text-indigo-200"></i>
+                                    <span>Browse Document</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Selected Document Card & Configuration Options (Visible once file is picked) -->
+                        <div id="doc-active-card" class="hidden glass-card rounded-2xl p-5 sm:p-6 space-y-5">
+                            
+                            <!-- File Meta Header Row -->
+                            <div class="flex items-center justify-between gap-3 pb-4 border-b border-slate-800 flex-wrap sm:flex-nowrap">
+                                <div class="flex items-center gap-3.5 min-w-0">
+                                    <div id="doc-active-icon-container" class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                                        <i data-lucide="file-text" class="w-6 h-6 text-indigo-400"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <h4 id="doc-active-filename" class="text-sm sm:text-base font-bold text-white truncate font-display">document.pdf</h4>
+                                        <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                                            <span id="doc-active-filesize" class="font-mono">1.2 MB</span>
+                                            <span>•</span>
+                                            <span id="doc-active-format-badge" class="uppercase font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">PDF</span>
+                                            <span>•</span>
+                                            <span class="text-emerald-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Ready to Process</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <label for="primary-doc-upload-input" class="cursor-pointer text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                        <span>Change File</span>
+                                    </label>
+                                    <button type="button" onclick="removeSelectedDocument()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 transition flex items-center gap-1.5">
+                                        <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-400"></i>
+                                        <span>Remove</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Settings: Tone, Intensity, Academic Shield -->
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-2">Target Tone</label>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <button type="button" onclick="setDocTone('natural')" id="doc-tone-natural" class="doc-tone-btn control-btn control-btn-active text-xs py-2 px-2 rounded-lg font-medium">🌿 Natural</button>
+                                        <button type="button" onclick="setDocTone('academic')" id="doc-tone-academic" class="doc-tone-btn control-btn text-xs py-2 px-2 rounded-lg font-medium">🎓 Academic</button>
+                                        <button type="button" onclick="setDocTone('professional')" id="doc-tone-professional" class="doc-tone-btn control-btn text-xs py-2 px-2 rounded-lg font-medium">💼 Business</button>
+                                        <button type="button" onclick="setDocTone('creative')" id="doc-tone-creative" class="doc-tone-btn control-btn text-xs py-2 px-2 rounded-lg font-medium">🎨 Creative</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="text-xs font-semibold text-slate-300">Humanization Intensity</label>
+                                        <span class="text-[10px] text-emerald-400 font-mono">&lt; 15% AI Target</span>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-1.5">
+                                        <button type="button" onclick="setDocIntensity('mild')" id="doc-int-mild" class="doc-int-btn control-btn text-xs py-2 px-1 text-center rounded-lg font-medium">Mild</button>
+                                        <button type="button" onclick="setDocIntensity('balanced')" id="doc-int-balanced" class="doc-int-btn control-btn control-btn-active text-xs py-2 px-1 text-center rounded-lg font-medium">Balanced</button>
+                                        <button type="button" onclick="setDocIntensity('aggressive')" id="doc-int-aggressive" class="doc-int-btn control-btn text-xs py-2 px-1 text-center rounded-lg font-medium">Stealth</button>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 mt-2" id="doc-intensity-desc">Balanced: removes clichés, breaks compound clauses, and drops AI score &lt; 15%.</p>
+                                </div>
+                                <div class="flex flex-col justify-between">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-300 mb-2">Academic Shield</label>
+                                        <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                                            <label class="flex items-center space-x-2.5 cursor-pointer select-none">
+                                                <input type="checkbox" id="doc-academic-shield-check" checked class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-indigo-500">
+                                                <div class="text-xs">
+                                                    <span class="text-white font-medium block flex items-center gap-1">
+                                                        <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i> Protect Citations & Quotes
+                                                    </span>
+                                                    <span class="text-[10px] text-slate-400 block mt-0.5">Preserves (Author, Year), [12], and verbatim quotes untouched.</span>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Process Button -->
+                            <button
+                                type="button"
+                                id="doc-process-btn"
+                                onclick="startDocumentProcessing()"
+                                class="btn-primary-luxury w-full py-3.5 rounded-xl font-bold text-sm sm:text-base text-white transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30"
+                            >
+                                <i data-lucide="sparkles" class="w-5 h-5 text-indigo-200"></i>
+                                <span id="doc-process-btn-text">Humanize Document & Detect AI</span>
+                            </button>
+                        </div>
+
+                        <!-- Processing State Indicator (Visible during processing) -->
+                        <div id="doc-processing-state" class="hidden glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center">
+                                        <span class="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></span>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm sm:text-base font-bold text-white">Processing Document</h4>
+                                        <p id="doc-processing-status-text" class="text-xs text-indigo-300 font-mono mt-0.5">Uploading document to secure memory...</p>
+                                    </div>
+                                </div>
+                                <span id="doc-processing-percentage" class="text-base sm:text-lg font-mono font-bold text-indigo-400">15%</span>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                                <div id="doc-progress-bar-fill" class="bg-gradient-to-r from-indigo-500 via-indigo-400 to-emerald-400 h-full rounded-full transition-all duration-300" style="width: 15%"></div>
+                            </div>
+
+                            <!-- 7-Step Tracker -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-2" id="doc-step-tracker">
+                                <div id="step-1" class="step-item step-active">
+                                    <div class="step-circle">1</div>
+                                    <span class="step-label truncate">Uploading</span>
+                                </div>
+                                <div id="step-2" class="step-item step-pending">
+                                    <div class="step-circle">2</div>
+                                    <span class="step-label truncate">Extracting</span>
+                                </div>
+                                <div id="step-3" class="step-item step-pending">
+                                    <div class="step-circle">3</div>
+                                    <span class="step-label truncate">Analyzing</span>
+                                </div>
+                                <div id="step-4" class="step-item step-pending">
+                                    <div class="step-circle">4</div>
+                                    <span class="step-label truncate">Humanizing</span>
+                                </div>
+                                <div id="step-5" class="step-item step-pending">
+                                    <div class="step-circle">5</div>
+                                    <span class="step-label truncate">Re-analyzing</span>
+                                </div>
+                                <div id="step-6" class="step-item step-pending">
+                                    <div class="step-circle">6</div>
+                                    <span class="step-label truncate">Generating</span>
+                                </div>
+                                <div id="step-7" class="step-item step-pending">
+                                    <div class="step-circle">7</div>
+                                    <span class="step-label truncate">Complete</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Error Box (Visible on failure) -->
+                        <div id="doc-error-box" class="hidden p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-3">
+                                <i data-lucide="alert-circle" class="w-5 h-5 text-rose-400 shrink-0 mt-0.5"></i>
+                                <div>
+                                    <h5 class="text-sm font-bold text-rose-200">Processing Error</h5>
+                                    <p id="doc-error-text" class="text-xs text-rose-300/90 mt-0.5">Something went wrong during document processing.</p>
+                                </div>
+                            </div>
+                            <button onclick="dismissDocError()" class="text-xs px-3 py-1 rounded bg-rose-900/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-200 shrink-0">Try Again</button>
+                        </div>
+
+                        <!-- Results Dashboard (Visible upon completion) -->
+                        <div id="doc-results-dashboard" class="hidden space-y-6">
+
+                            <!-- Top Section: Side-by-Side Genuine AI Comparison Cards -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                
+                                <!-- Card 1: Original Document -->
+                                <div class="glass-card rounded-2xl p-5 border border-slate-800 space-y-3.5">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                            <i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-400"></i> Original Document
+                                        </span>
+                                        <span id="doc-orig-verdict-badge" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">Likely AI</span>
+                                    </div>
+                                    <div class="flex items-baseline justify-between">
+                                        <div>
+                                            <span class="text-xs text-slate-400 block">AI Detection Ratio</span>
+                                            <span id="doc-orig-ai-score" class="text-3xl sm:text-4xl font-extrabold text-rose-400 font-display">75%</span>
+                                        </div>
+                                        <div class="text-right">
+                                            <span class="text-xs text-slate-400 block">Human-like Ratio</span>
+                                            <span id="doc-orig-human-score" class="text-lg sm:text-xl font-bold text-slate-300 font-display">25%</span>
+                                        </div>
+                                    </div>
+                                    <div class="ratio-bar-bg">
+                                        <div id="doc-orig-ratio-bar" class="ratio-bar-fill-ai" style="width: 75%"></div>
+                                    </div>
+                                    <p id="doc-orig-expl" class="text-xs text-slate-400 leading-relaxed">Mechanical syntax, low sentence length variance, and formulaic AI openers detected.</p>
+                                </div>
+
+                                <!-- Card 2: After Humanization -->
+                                <div class="glass-card rounded-2xl p-5 border border-emerald-500/30 space-y-3.5 bg-gradient-to-b from-slate-900/90 to-emerald-950/20">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                                            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> After Humanization
+                                        </span>
+                                        <span id="doc-humanized-verdict-badge" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Verified Human</span>
+                                    </div>
+                                    <div class="flex items-baseline justify-between">
+                                        <div>
+                                            <span class="text-xs text-emerald-300/80 block">AI Detection Ratio</span>
+                                            <span id="doc-humanized-ai-score" class="text-3xl sm:text-4xl font-extrabold text-emerald-400 font-display">6%</span>
+                                        </div>
+                                        <div class="text-right">
+                                            <span class="text-xs text-emerald-300/80 block">Human-like Ratio</span>
+                                            <span id="doc-humanized-human-score" class="text-lg sm:text-xl font-bold text-emerald-300 font-display">94%</span>
+                                        </div>
+                                    </div>
+                                    <div class="ratio-bar-bg">
+                                        <div id="doc-humanized-ratio-bar" class="ratio-bar-fill-human" style="width: 94%"></div>
+                                    </div>
+                                    <p id="doc-humanized-expl" class="text-xs text-emerald-200/80 leading-relaxed">High sentence length variance (burstiness), natural transitions, and authentic human cadence.</p>
+                                </div>
+
+                            </div>
+
+                            <!-- Delta Reduction & Shield Banner -->
+                            <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                                        <i data-lucide="trending-down" class="w-5 h-5 text-emerald-400"></i>
+                                    </div>
+                                    <div>
+                                        <span class="text-xs font-bold text-white block">Forensic Optimization Summary</span>
+                                        <span id="doc-delta-banner-text" class="text-xs text-slate-300">AI likelihood dropped by 69% in a single closed-loop pass.</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span id="doc-shield-badge" class="text-xs px-2.5 py-1 rounded-full font-mono bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                        🛡️ Citations Preserved
+                                    </span>
+                                    <span id="doc-delta-badge" class="text-xs px-2.5 py-1 rounded-full font-bold font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                                        -69% AI Drop
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Metadata & Stats Bar -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
+                                    <span class="text-[11px] text-slate-400 block mb-0.5">Document</span>
+                                    <span id="doc-meta-filename" class="text-xs font-bold text-white truncate block">document.pdf</span>
+                                </div>
+                                <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
+                                    <span class="text-[11px] text-slate-400 block mb-0.5">Words Processed</span>
+                                    <span id="doc-meta-words" class="text-xs font-bold text-indigo-300">0 words</span>
+                                </div>
+                                <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
+                                    <span class="text-[11px] text-slate-400 block mb-0.5">Characters</span>
+                                    <span id="doc-meta-chars" class="text-xs font-bold text-indigo-200">0 chars</span>
+                                </div>
+                                <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 text-center">
+                                    <span class="text-[11px] text-slate-400 block mb-0.5">Estimated Pages</span>
+                                    <span id="doc-meta-pages" class="text-xs font-bold text-sky-300">1 page</span>
+                                </div>
+                            </div>
+
+                            <!-- Humanized Text Preview Card -->
+                            <div class="glass-card rounded-2xl p-5 border border-slate-800 space-y-3">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-800 pb-2.5">
+                                    <div class="flex space-x-3 text-xs">
+                                        <button type="button" onclick="setDocPreviewTab('clean')" id="doc-tab-clean" class="font-semibold text-white border-b-2 border-indigo-400 pb-1 flex items-center gap-1">
+                                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Formatted Text Preview
+                                        </button>
+                                        <button type="button" onclick="setDocPreviewTab('diff')" id="doc-tab-diff" class="font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1">
+                                            <i data-lucide="git-compare" class="w-3.5 h-3.5"></i> Side-by-Side Diff
+                                        </button>
+                                        <button type="button" onclick="setDocPreviewTab('raw')" id="doc-tab-raw" class="font-medium text-slate-400 hover:text-slate-200 pb-1 flex items-center gap-1">
+                                            <i data-lucide="align-left" class="w-3.5 h-3.5"></i> Raw Plaintext
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" onclick="copyDocOutput()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1 text-xs">
+                                            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Text
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Preview Views -->
+                                <div id="doc-view-clean" class="p-4 bg-slate-900/80 border border-slate-800 rounded-xl text-sm leading-relaxed text-slate-200 max-h-72 overflow-y-auto space-y-3">
+                                    <!-- Clean formatted paragraphs -->
+                                </div>
+                                <div id="doc-view-diff" class="hidden p-4 bg-slate-900/80 border border-slate-800 rounded-xl text-sm leading-relaxed max-h-72 overflow-y-auto">
+                                    <!-- Ins and del diff -->
+                                </div>
+                                <div id="doc-view-raw" class="hidden">
+                                    <textarea id="doc-raw-textarea" rows="8" readonly class="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-300 resize-none leading-relaxed"></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Downloads & Actions Bar -->
+                            <div class="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div>
+                                    <h4 class="text-sm font-bold text-white">Download Processed Document</h4>
+                                    <p class="text-xs text-slate-400 mt-0.5">High-fidelity binary files with preserved paragraphs and structure.</p>
+                                </div>
+                                <div class="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
+                                    <button
+                                        type="button"
+                                        id="doc-download-primary-btn"
+                                        onclick="triggerDocDownload('default')"
+                                        class="btn-primary-luxury px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white transition flex items-center gap-2 shadow-lg shadow-indigo-600/30"
+                                    >
+                                        <i data-lucide="download" class="w-4 h-4"></i>
+                                        <span id="doc-primary-download-label">Download Humanized Document</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick="triggerDocDownload('pdf')"
+                                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition"
+                                        title="Download as PDF document"
+                                    >
+                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-rose-400"></i> PDF
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick="triggerDocDownload('docx')"
+                                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition"
+                                        title="Download as Microsoft Word document"
+                                    >
+                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i> DOCX
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick="triggerDocDownload('txt')"
+                                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition"
+                                        title="Download as plain text"
+                                    >
+                                        <i data-lucide="file" class="w-3.5 h-3.5 text-slate-400"></i> TXT
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick="openDocAuditCertificate()"
+                                        class="px-3 py-2 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-500/30 text-xs font-medium flex items-center gap-1.5 transition"
+                                        title="Generate printable forensic verification certificate"
+                                    >
+                                        <i data-lucide="award" class="w-3.5 h-3.5 text-emerald-400"></i> Certificate
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick="resetDocumentStudio()"
+                                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition"
+                                        title="Upload another document"
+                                    >
+                                        <i data-lucide="plus" class="w-3.5 h-3.5"></i> New Upload
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <!-- ================= 2. DIRECT TEXT STUDIO VIEW ================= -->
+                    <div id="studio-text-view" class="hidden space-y-6">
+
+                        <!-- Preset Sample Pills Bar -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-900/80 p-2.5 sm:p-3 rounded-xl border border-white/[0.06]">
+                            <div class="flex items-center space-x-2 text-xs font-medium text-slate-300 shrink-0">
+                                <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
+                                <span>Load Benchmark Sample:</span>
+                            </div>
                         <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar" id="samples-container">
                             <button onclick="loadSample('ai_essay')" class="whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition flex items-center gap-1.5">
                                 <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> ChatGPT Essay
@@ -508,20 +922,23 @@
                                 </span>
                             </div>
 
-                            <!-- Multi-Detector Bypass Calibration Simulator -->
-                            <div class="p-3 rounded-xl bg-slate-900/80 border border-white/[0.08] space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                                        Target Platform Bypass Calibration
-                                    </span>
-                                    <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
-                                        Safe Tier (&lt;10% AI)
-                                    </span>
+                            <!-- Authentic Before vs After AI Ratio Comparison -->
+                            <div class="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-900/80 border border-white/[0.08]">
+                                <div class="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[10px] uppercase font-mono text-slate-400">Original Text</span>
+                                        <span id="text-orig-verdict" class="text-[10px] px-1.5 py-0.5 rounded font-semibold text-rose-400 bg-rose-500/10">Likely AI</span>
+                                    </div>
+                                    <div class="text-xl font-extrabold text-rose-400" id="text-orig-score">0%</div>
+                                    <div class="text-[10px] text-slate-400">AI: <span id="text-orig-ai-sub">0%</span> • Human: <span id="text-orig-human-sub">100%</span></div>
                                 </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center" id="detector-sim-grid">
-                                    <!-- Populated dynamically with Turnitin, GPTZero, CopyLeaks, Winston AI -->
+                                <div class="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/20 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[10px] uppercase font-mono text-emerald-400">Humanized Text</span>
+                                        <span id="text-hum-verdict" class="text-[10px] px-1.5 py-0.5 rounded font-semibold text-emerald-300 bg-emerald-500/20">Human</span>
+                                    </div>
+                                    <div class="text-xl font-extrabold text-emerald-400" id="text-hum-score">0%</div>
+                                    <div class="text-[10px] text-emerald-300/80">AI: <span id="text-hum-ai-sub">0%</span> • Human: <span id="text-hum-human-sub">100%</span></div>
                                 </div>
                             </div>
 
@@ -542,13 +959,16 @@
                                     <button onclick="copyOutput()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" id="copy-btn">
                                         <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
                                     </button>
-                                    <button onclick="downloadDocx()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-500/20 transition flex items-center gap-1" title="Download as Microsoft Word document">
+                                    <button onclick="downloadTextDoc('docx')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-500/20 transition flex items-center gap-1" title="Download as Microsoft Word document">
                                         <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i> .DOCX
+                                    </button>
+                                    <button onclick="downloadTextDoc('pdf')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/20 transition flex items-center gap-1" title="Download as PDF document">
+                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-rose-400"></i> .PDF
                                     </button>
                                     <button onclick="openAuditCertificate('humanizer')" class="px-2.5 py-1 rounded bg-emerald-900/30 hover:bg-emerald-800/40 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1" title="Generate printable verification certificate">
                                         <i data-lucide="award" class="w-3.5 h-3.5 text-emerald-400"></i> Certificate
                                     </button>
-                                    <button onclick="downloadText()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" title="Download TXT">
+                                    <button onclick="downloadTextDoc('txt')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1" title="Download TXT">
                                         <i data-lucide="download" class="w-3.5 h-3.5"></i> .TXT
                                     </button>
                                     <button onclick="sendToDetector()" class="px-2.5 py-1 rounded bg-indigo-900/40 hover:bg-indigo-800/50 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1" title="Re-scan in detector">
@@ -591,6 +1011,7 @@
                 </div>
 
             </div>
+            </div> <!-- closes studio-text-view -->
             </div> <!-- closes p-3.5 sm:p-6 bg-slate-950/60 -->
             </div> <!-- closes app-window-frame -->
 
