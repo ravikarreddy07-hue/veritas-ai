@@ -277,6 +277,7 @@ async def process_document_endpoint(
         "file_stem": stem,
         "file_size": len(file_bytes),
         "format": orig_fmt,
+        "output_format": default_fmt,
         "page_count": extraction.get("page_count", 1),
         "word_count": len(original_text.split()),
         "char_count": len(original_text),
@@ -289,6 +290,13 @@ async def process_document_endpoint(
         "score_delta": score_delta,
         "changes_applied": h_result.get("changes_applied", []),
         "shielded_items_count": h_result.get("shielded_items_count", 0),
+        "humanization": {
+            "original_text": original_text,
+            "humanized_text": humanized_text,
+            "changes_applied": h_result.get("changes_applied", []),
+            "shielded_items_count": h_result.get("shielded_items_count", 0),
+            "paragraphs": paragraphs
+        },
         "download_urls": {
             "pdf": f"/api/document/download/{doc_id}?format=pdf",
             "docx": f"/api/document/download/{doc_id}?format=docx",
