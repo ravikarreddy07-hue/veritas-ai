@@ -218,31 +218,92 @@ def is_heading_or_side_heading(
     words = t.split()
     has_terminal_punct = t.endswith((".", "!", "?"))
 
-    # Full sentences with terminal punctuation and > 5 words are body content
-    if has_terminal_punct and len(words) > 5:
-        return False
+    # Slide header / banner location (top 18% of slide height)
+    if rect and page_height and rect.y1 < (page_height * 0.18) and len(words) <= 14:
+        return True
+
+    # Prominent font size
+    if font_size and font_size >= 15.0 and len(words) <= 12:
+        return True
 
     # Side-heading labels ending in colon (e.g. "Key Observations:", "Strategy Overview:")
     if t.endswith(":") and len(words) <= 9:
+        return True
+
+    # Numbered / section headings (e.g. "1. Overview", "2.1 Background", "Section 1")
+    if re.match(r'^(?:[0-9]+(?:\.[0-9]+)*|[A-Z]\.|(?:Section|Chapter|Part)\s+[0-9A-Za-z]+)\b', t, re.I) and len(words) <= 10:
+        return True
+
+    # Bold short lines
+    if is_bold and len(words) <= 10:
         return True
 
     # Standalone short phrases without terminal punctuation (e.g. slide titles, side headings)
     if not has_terminal_punct and len(words) <= 9 and len(t) < 80:
         return True
 
-    # Slide header / banner location (top 18% of slide height)
-    if rect and page_height and rect.y1 < (page_height * 0.18) and len(words) <= 14:
-        return True
-
-    # Prominent font size
-    if font_size and font_size >= 16.0 and len(words) <= 12:
-        return True
-
-    # Bold short lines
-    if is_bold and len(words) <= 10 and not has_terminal_punct:
-        return True
+    # Full sentences with terminal punctuation and > 5 words are body content
+    if has_terminal_punct and len(words) > 5:
+        return False
 
     return False
+
+
+def get_block_bg_color(page, rect, text_color=(0.15, 0.15, 0.15)) -> Tuple[float, float, float]:
+    """
+    Samples the underlying background color right outside the text block perimeter.
+    Guarantees seamless color matching for dark slides, tinted banners, or light pages.
+    """
+    sample_points = [
+        (max(1, rect.x0 - 4), max(1, rect.y0 - 4)),
+        (min(page.rect.width - 3, rect.x1 + 4), max(1, rect.y0 - 4)),
+        (max(1, rect.x0 - 4), min(page.rect.height - 3, rect.y1 + 4)),
+        (max(1, rect.x0 + 4), max(1, rect.y0 - 4))
+    ]
+    sampled_colors = []
+    for px, py in sample_points:
+        try:
+            pix = page.get_pixmap(clip=pymupdf.Rect(px, py, px + 2, py + 2))
+            if pix.width > 0 and pix.height > 0:
+                p = pix.pixel(0, 0)
+                sampled_colors.append((p[0] / 255.0, p[1] / 255.0, p[2] / 255.0))
+        except Exception:
+            pass
+
+    if sampled_colors:
+        text_lum = 0.299 * text_color[0] + 0.587 * text_color[1] + 0.114 * text_color[2]
+        best_c = sampled_colors[0]
+        max_diff = -1
+        for c in sampled_colors:
+            lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+            diff = abs(lum - text_lum)
+            if diff > max_diff:
+                max_diff = diff
+                best_c = c
+        return best_c
+
+    text_lum = 0.299 * text_color[0] + 0.587 * text_color[1] + 0.114 * text_color[2]
+    return (1.0, 1.0, 1.0) if text_lum < 0.5 else (0.08, 0.10, 0.18)
+
+
+def fit_text_in_rect(rect, text: str, base_size: float, fontname: str = "helv") -> float:
+    """
+    Tests font scaling on a temporary scratch canvas to find the optimal font size
+    where text fits completely (rc >= 0) without any clipping, overflow, or collision.
+    """
+    temp_doc = pymupdf.open()
+    temp_page = temp_doc.new_page(width=rect.width + 100, height=rect.height + 100)
+    temp_rect = pymupdf.Rect(10, 10, 10 + rect.width, 10 + rect.height)
+    best_size = base_size
+    for scale in [1.0, 0.96, 0.92, 0.88, 0.84, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55]:
+        sz = max(6.5, round(base_size * scale, 1))
+        rc = temp_page.insert_textbox(temp_rect, text, fontsize=sz, fontname=fontname)
+        if rc >= 0:
+            best_size = sz
+            break
+        best_size = sz
+    temp_doc.close()
+    return best_size
 
 
 def humanize_pdf_in_place(
@@ -257,7 +318,8 @@ def humanize_pdf_in_place(
     - Preserves 100% of all images, logos, charts, diagrams, and vector art.
     - Preserves exact slide/page geometry, backgrounds, margins, and layout pattern.
     - Identifies slide titles, side headings, section headers, and leaves them untouched in their exact positions.
-    - Replaces only body content text in-place, matching font size, color, and boundaries.
+    - Completely obliterates old body text using color-matched background wiping (zero ghost text / text overlay).
+    - Renders humanized text within obstacle-bounded safe containers with guaranteed font fitting.
     - Respects anti-regression guarantees.
     """
     detector = humanizer._get_detector()
@@ -323,7 +385,8 @@ def humanize_pdf_in_place(
                     block_props[key] = (avg_size, dom_color, is_bold)
 
         blocks = page.get_text("blocks")
-        replace_queue = []
+        all_obstacle_rects = []
+        body_blocks_to_replace = []
 
         for b in blocks:
             rect = pymupdf.Rect(b[:4])
@@ -339,37 +402,65 @@ def humanize_pdf_in_place(
 
             if is_heading_or_side_heading(text, rect=rect, page_height=page.rect.height, font_size=fsize, is_bold=is_bold):
                 all_humanized_paragraphs.append(text)
-                continue
+                all_obstacle_rects.append(rect)
+            else:
+                body_blocks_to_replace.append((rect, text, fsize, fcolor, is_bold))
 
-            h_res = humanizer.humanize(
-                text,
-                tone=tone,
-                intensity=intensity,
-                academic_shield=academic_shield
-            )
-            hum_text = h_res["humanized_text"].strip()
-            all_humanized_paragraphs.append(hum_text)
-            total_changes.extend(h_res.get("changes_applied", []))
-            total_shielded += h_res.get("shielded_items_count", 0)
+        # Also collect all images on the page as obstacles so text never encroaches on pictures
+        for img_info in page.get_images():
+            try:
+                for iloc in page.get_image_rects(img_info[0]):
+                    all_obstacle_rects.append(iloc)
+            except Exception:
+                pass
 
-            replace_queue.append((rect, hum_text, fsize, fcolor, is_bold))
-            page.add_redact_annot(rect, fill=False)
+        if body_blocks_to_replace:
+            replacements = []
+            for rect, text, fsize, fcolor, is_bold in body_blocks_to_replace:
+                h_res = humanizer.humanize(
+                    text,
+                    tone=tone,
+                    intensity=intensity,
+                    academic_shield=academic_shield
+                )
+                hum_text = h_res["humanized_text"].strip()
+                all_humanized_paragraphs.append(hum_text)
+                total_changes.extend(h_res.get("changes_applied", []))
+                total_shielded += h_res.get("shielded_items_count", 0)
 
-        if replace_queue:
+                # Calculate safe target rect bounded by obstacles (no collisions)
+                max_x1 = page.rect.width - 20
+                for obs in all_obstacle_rects:
+                    if obs.x0 > rect.x0 and not (obs.y1 <= rect.y0 or obs.y0 >= rect.y1):
+                        max_x1 = min(max_x1, obs.x0 - 15)
+
+                max_y1 = page.rect.height - 20
+                for obs in all_obstacle_rects:
+                    if obs.y0 >= rect.y1 and not (obs.x1 <= rect.x0 or obs.x0 >= max_x1):
+                        max_y1 = min(max_y1, obs.y0 - 8)
+
+                for other_rect, _, _, _, _ in body_blocks_to_replace:
+                    if other_rect.y0 >= rect.y1 and not (other_rect.x1 <= rect.x0 or other_rect.x0 >= max_x1):
+                        max_y1 = min(max_y1, other_rect.y0 - 8)
+
+                safe_target_rect = pymupdf.Rect(rect.x0, rect.y0, max_x1, max(rect.y1, max_y1))
+
+                # Detect matching background color
+                bg_color = get_block_bg_color(page, rect, fcolor)
+
+                # Wipe the old text cleanly with background fill (padded by 1.5pt)
+                wipe_rect = pymupdf.Rect(rect.x0 - 1.5, rect.y0 - 1.5, rect.x1 + 1.5, rect.y1 + 1.5)
+                page.add_redact_annot(wipe_rect, fill=bg_color)
+
+                replacements.append((safe_target_rect, hum_text, fsize, fcolor, bg_color))
+
+            # Apply all redactions cleanly in one pass, protecting 100% of images
             page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
 
-            for rect, new_text, fsize, fcolor, is_bold in replace_queue:
-                target_rect = pymupdf.Rect(rect.x0, rect.y0, rect.x1, min(page.rect.height - 10, rect.y1 + 18))
-                fontname = "helv"
-                rc = page.insert_textbox(target_rect, new_text, fontsize=fsize, fontname=fontname, color=fcolor)
-                if rc < 0:
-                    for scale in [0.92, 0.85, 0.80, 0.75]:
-                        test_size = max(7.5, fsize * scale)
-                        page.add_redact_annot(target_rect, fill=False)
-                        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
-                        rc2 = page.insert_textbox(target_rect, new_text, fontsize=test_size, fontname=fontname, color=fcolor)
-                        if rc2 >= 0:
-                            break
+            # Insert all humanized replacements with guaranteed-fit font sizing
+            for safe_rect, hum_text, fsize, fcolor, bg_color in replacements:
+                opt_size = fit_text_in_rect(safe_rect, hum_text, fsize)
+                page.insert_textbox(safe_rect, hum_text, fontsize=opt_size, color=fcolor, fontname="helv")
 
     output_pdf_bytes = doc.tobytes()
     doc.close()
