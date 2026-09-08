@@ -18,6 +18,9 @@ from engine.humanizer import AIHumanizer
 from engine.document_processor import (
     extract_text_from_document,
     humanize_document_structured,
+    humanize_pdf_in_place,
+    humanize_pptx_in_place,
+    humanize_docx_in_place,
     generate_docx_document,
     generate_pdf_document,
     generate_txt_document,
@@ -230,15 +233,49 @@ async def process_document_endpoint(
     except Exception as det_err:
         raise HTTPException(status_code=500, detail=f"Failed to analyze original document: {str(det_err)}")
 
-    # 3. Structure-preserving Humanization
+    orig_fmt = extraction["format"]
+
+    # 3. Format-Aware In-Place Humanization (100% Image & Side-Heading Preservation)
+    native_pdf_bytes = None
+    native_pptx_bytes = None
+    native_docx_bytes = None
+
     try:
-        h_result = humanize_document_structured(
-            humanizer=humanizer,
-            text=original_text,
-            tone=tone,
-            intensity=intensity,
-            academic_shield=academic_shield
-        )
+        if orig_fmt == "pdf":
+            h_result = humanize_pdf_in_place(
+                file_bytes=file_bytes,
+                humanizer=humanizer,
+                tone=tone,
+                intensity=intensity,
+                academic_shield=academic_shield
+            )
+            native_pdf_bytes = h_result.get("pdf_bytes")
+        elif orig_fmt == "pptx":
+            h_result = humanize_pptx_in_place(
+                file_bytes=file_bytes,
+                humanizer=humanizer,
+                tone=tone,
+                intensity=intensity,
+                academic_shield=academic_shield
+            )
+            native_pptx_bytes = h_result.get("pptx_bytes")
+        elif orig_fmt == "docx":
+            h_result = humanize_docx_in_place(
+                file_bytes=file_bytes,
+                humanizer=humanizer,
+                tone=tone,
+                intensity=intensity,
+                academic_shield=academic_shield
+            )
+            native_docx_bytes = h_result.get("docx_bytes")
+        else:
+            h_result = humanize_document_structured(
+                humanizer=humanizer,
+                text=original_text,
+                tone=tone,
+                intensity=intensity,
+                academic_shield=academic_shield
+            )
     except Exception as hum_err:
         raise HTTPException(status_code=500, detail=f"Failed to humanize document: {str(hum_err)}")
 
@@ -257,14 +294,18 @@ async def process_document_endpoint(
         humanized_analysis = original_analysis
         paragraphs = extraction.get("paragraphs") or [p.strip() for p in original_text.split("\n\n") if p.strip()] or [original_text]
         h_result["changes_applied"] = [f"Document verified as authentic human prose ({original_analysis['ai_percentage']}% AI). Preserved original cadence."]
+        native_pdf_bytes = file_bytes if orig_fmt == "pdf" else None
+        native_pptx_bytes = file_bytes if orig_fmt == "pptx" else None
+        native_docx_bytes = file_bytes if orig_fmt == "docx" else None
 
-    # 5. Generate Real Binary Document Files
+    # 5. Generate / Package Real Binary Document Files
     doc_id = str(uuid.uuid4())
     doc_title = f"{stem.replace('_', ' ').title()} - Humanized"
 
     try:
-        docx_bytes = generate_docx_document(paragraphs, title=doc_title)
-        pdf_bytes = generate_pdf_document(paragraphs, title=doc_title)
+        pdf_bytes = native_pdf_bytes or generate_pdf_document(paragraphs, title=doc_title)
+        docx_bytes = native_docx_bytes or generate_docx_document(paragraphs, title=doc_title)
+        pptx_bytes = native_pptx_bytes
         txt_bytes = generate_txt_document(paragraphs)
     except Exception as gen_err:
         raise HTTPException(status_code=500, detail=f"Failed to generate download files: {str(gen_err)}")
@@ -273,17 +314,26 @@ async def process_document_endpoint(
     document_cache.store(doc_id, {
         "stem": stem,
         "filename": clean_filename,
-        "format": extraction["format"],
+        "format": orig_fmt,
         "docx_bytes": docx_bytes,
         "pdf_bytes": pdf_bytes,
+        "pptx_bytes": pptx_bytes,
         "txt_bytes": txt_bytes,
         "text": humanized_text,
         "paragraphs": paragraphs
     })
 
     score_delta = max(0, original_analysis["ai_percentage"] - humanized_analysis["ai_percentage"])
-    orig_fmt = extraction["format"]
-    default_fmt = "docx" if orig_fmt == "docx" else ("pdf" if orig_fmt == "pdf" else "txt")
+    default_fmt = "pptx" if orig_fmt == "pptx" else ("docx" if orig_fmt == "docx" else ("pdf" if orig_fmt == "pdf" else "txt"))
+
+    download_urls = {
+        "pdf": f"/api/document/download/{doc_id}?format=pdf",
+        "docx": f"/api/document/download/{doc_id}?format=docx",
+        "txt": f"/api/document/download/{doc_id}?format=txt",
+        "default": f"/api/document/download/{doc_id}?format={default_fmt}"
+    }
+    if pptx_bytes:
+        download_urls["pptx"] = f"/api/document/download/{doc_id}?format=pptx"
 
     return JSONResponse(content={
         "status": "success",
@@ -312,18 +362,13 @@ async def process_document_endpoint(
             "shielded_items_count": h_result.get("shielded_items_count", 0),
             "paragraphs": paragraphs
         },
-        "download_urls": {
-            "pdf": f"/api/document/download/{doc_id}?format=pdf",
-            "docx": f"/api/document/download/{doc_id}?format=docx",
-            "txt": f"/api/document/download/{doc_id}?format=txt",
-            "default": f"/api/document/download/{doc_id}?format={default_fmt}"
-        }
+        "download_urls": download_urls
     })
 
 @app.get("/api/document/download/{doc_id}")
 async def download_document_endpoint(doc_id: str, format: str = "pdf"):
     """
-    Downloads processed humanized document in real PDF, DOCX, or TXT format
+    Downloads processed humanized document in real PDF, PPTX, DOCX, or TXT format
     with preserved original naming ({original_stem}_humanized.{ext}).
     """
     cached = document_cache.get(doc_id)
@@ -340,6 +385,12 @@ async def download_document_endpoint(doc_id: str, format: str = "pdf"):
         content = cached["pdf_bytes"]
         media_type = "application/pdf"
         filename = f"{stem}_humanized.pdf"
+    elif fmt in ["pptx", "ppt"]:
+        if "pptx_bytes" not in cached or not cached["pptx_bytes"]:
+            raise HTTPException(status_code=400, detail="PowerPoint format is not available for this document.")
+        content = cached["pptx_bytes"]
+        media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        filename = f"{stem}_humanized.pptx"
     elif fmt in ["docx", "doc"]:
         content = cached["docx_bytes"]
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -351,7 +402,7 @@ async def download_document_endpoint(doc_id: str, format: str = "pdf"):
     else:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported download format '{format}'. Supported formats: pdf, docx, txt."
+            detail=f"Unsupported download format '{format}'. Supported formats: pdf, pptx, docx, txt."
         )
 
     headers = {

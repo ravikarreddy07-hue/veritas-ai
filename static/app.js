@@ -324,10 +324,20 @@ function handlePrimaryFileUpload(event) {
     const filenameEl = document.getElementById('doc-active-filename');
     const filesizeEl = document.getElementById('doc-active-filesize');
     const badgeEl = document.getElementById('doc-active-format-badge');
+    const iconContainer = document.getElementById('doc-active-icon-container');
 
     if (filenameEl) filenameEl.textContent = fileName;
     if (filesizeEl) filesizeEl.textContent = sizeStr;
     if (badgeEl) badgeEl.textContent = ext;
+    if (iconContainer) {
+        if (ext === 'PPTX' || ext === 'PPT') {
+            iconContainer.innerHTML = '<i data-lucide="presentation" class="w-6 h-6 text-amber-400"></i>';
+        } else if (ext === 'PDF') {
+            iconContainer.innerHTML = '<i data-lucide="file-text" class="w-6 h-6 text-rose-400"></i>';
+        } else {
+            iconContainer.innerHTML = '<i data-lucide="file-text" class="w-6 h-6 text-indigo-400"></i>';
+        }
+    }
 
     const uploadArea = document.getElementById('doc-upload-area');
     const activeCard = document.getElementById('doc-active-card');
@@ -618,6 +628,16 @@ function renderDocumentResults(data) {
     if (primaryLabel) {
         const fmt = (data.output_format || data.format || 'docx').toUpperCase();
         primaryLabel.textContent = `Download Humanized .${fmt}`;
+    }
+
+    // Unhide PPTX download button if PPTX format is available
+    const pptxBtn = document.getElementById('doc-download-pptx-btn');
+    if (pptxBtn) {
+        if (data.format === 'pptx' || data.download_urls?.pptx) {
+            pptxBtn.classList.remove('hidden');
+        } else {
+            pptxBtn.classList.add('hidden');
+        }
     }
 
     setDocPreviewTab('clean');
