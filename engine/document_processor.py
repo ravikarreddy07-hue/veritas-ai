@@ -229,6 +229,7 @@ def is_heading_or_side_heading(
     """
     Identifies slide titles, side headings, section headers, and callout labels.
     Ensures these elements are protected and NEVER modified or shifted during humanization.
+    List items and bullet points are explicitly recognized as body content.
     """
     t = text.strip()
     if not t:
@@ -236,15 +237,23 @@ def is_heading_or_side_heading(
     if t.startswith("#"):
         return True
 
+    # Bullet points / list items are body content, NEVER standalone headings
+    if re.match(r'^(?:[\u2022\u2023\u25E6\u2043\u2219\*\-\—▪▫]|\([a-zA-Z0-9]+\))\s+', t):
+        return False
+
     words = t.split()
     has_terminal_punct = t.endswith((".", "!", "?"))
+
+    # Full sentences with terminal punctuation and > 5 words are body content
+    if has_terminal_punct and len(words) > 5:
+        return False
 
     # Slide header / banner location (top 18% of slide height)
     if rect and page_height and rect.y1 < (page_height * 0.18) and len(words) <= 14:
         return True
 
-    # Prominent font size
-    if font_size and font_size >= 15.0 and len(words) <= 12:
+    # Prominent font size on short text
+    if font_size and font_size >= 16.0 and len(words) <= 10 and not has_terminal_punct:
         return True
 
     # Side-heading labels ending in colon (e.g. "Key Observations:", "Strategy Overview:")
@@ -256,18 +265,184 @@ def is_heading_or_side_heading(
         return True
 
     # Bold short lines
-    if is_bold and len(words) <= 10:
+    if is_bold and len(words) <= 10 and not has_terminal_punct:
         return True
 
     # Standalone short phrases without terminal punctuation (e.g. slide titles, side headings)
-    if not has_terminal_punct and len(words) <= 9 and len(t) < 80:
+    if not has_terminal_punct and len(words) <= 8 and len(t) < 70:
         return True
 
-    # Full sentences with terminal punctuation and > 5 words are body content
-    if has_terminal_punct and len(words) > 5:
-        return False
-
     return False
+
+
+def map_pdf_fontname(font_str: str, is_bold: bool = False, is_italic: bool = False) -> str:
+    """
+    Maps detected document font family to the best-matching Base-14 PDF font.
+    Preserves serif vs sans-serif vs monospace and bold/italic font patterns.
+    """
+    f = font_str.lower()
+    if any(k in f for k in ["times", "roman", "serif", "cambria", "georgia", "garamond", "baskerville", "minion"]):
+        if is_bold and is_italic:
+            return "tibi"
+        elif is_bold:
+            return "tibo"
+        elif is_italic:
+            return "tiit"
+        return "times"
+    elif any(k in f for k in ["courier", "mono", "consolas", "code", "menlo", "source code"]):
+        if is_bold and is_italic:
+            return "cobi"
+        elif is_bold:
+            return "cobo"
+        elif is_italic:
+            return "coit"
+        return "couri"
+    else:
+        if is_bold and is_italic:
+            return "hebi"
+        elif is_bold:
+            return "hebo"
+        elif is_italic:
+            return "heit"
+        return "helv"
+
+
+def update_docx_paragraph_preserve_runs(p, new_text: str):
+    """
+    Updates a python-docx paragraph while preserving:
+    - Run-level font size (Pt), font family/name, bold, italic, underline, and color
+    - Multi-run patterns such as bold/colon prefix labels or bullet prefixes
+    """
+    if not p.runs:
+        p.text = new_text
+        return
+
+    # Check if run 0 or (run 0 + run 1) is a prefix that matches new_text
+    r0_text = p.runs[0].text
+    if len(p.runs) > 1 and new_text.startswith(r0_text):
+        remainder = new_text[len(r0_text):]
+        r1_text = p.runs[1].text
+        if len(p.runs) > 2 and remainder.startswith(r1_text):
+            body_text = remainder[len(r1_text):]
+            p.runs[2].text = body_text
+            for extra in p.runs[3:]:
+                extra.text = ""
+            return
+        elif len(p.runs) == 2:
+            p.runs[1].text = remainder
+            return
+        else:
+            p.runs[1].text = remainder
+            for extra in p.runs[2:]:
+                extra.text = ""
+            return
+
+    # Fallback: capture dominant styling from runs
+    dominant_run = p.runs[0]
+    for r in p.runs:
+        if r.font and r.font.size is not None:
+            dominant_run = r
+            break
+
+    font_name = dominant_run.font.name
+    font_size = dominant_run.font.size
+    bold = dominant_run.font.bold
+    italic = dominant_run.font.italic
+    underline = dominant_run.font.underline
+    color_rgb = None
+    try:
+        if dominant_run.font.color and dominant_run.font.color.rgb is not None:
+            color_rgb = dominant_run.font.color.rgb
+    except Exception:
+        pass
+
+    p.runs[0].text = new_text
+    for extra in p.runs[1:]:
+        extra.text = ""
+
+    if font_name:
+        p.runs[0].font.name = font_name
+    if font_size is not None:
+        p.runs[0].font.size = font_size
+    if bold is not None:
+        p.runs[0].font.bold = bold
+    if italic is not None:
+        p.runs[0].font.italic = italic
+    if underline is not None:
+        p.runs[0].font.underline = underline
+    if color_rgb is not None:
+        try:
+            p.runs[0].font.color.rgb = color_rgb
+        except Exception:
+            pass
+
+
+def update_pptx_paragraph_preserve_runs(para, new_text: str):
+    """
+    Updates a python-pptx paragraph while preserving:
+    - Run-level font size, font name, bold, italic, underline, and color
+    - Multi-run patterns such as bold labels or bullet prefixes
+    """
+    if not para.runs:
+        para.text = new_text
+        return
+
+    r0_text = para.runs[0].text
+    if len(para.runs) > 1 and new_text.startswith(r0_text):
+        remainder = new_text[len(r0_text):]
+        r1_text = para.runs[1].text
+        if len(para.runs) > 2 and remainder.startswith(r1_text):
+            body_text = remainder[len(r1_text):]
+            para.runs[2].text = body_text
+            for extra in para.runs[3:]:
+                extra.text = ""
+            return
+        elif len(para.runs) == 2:
+            para.runs[1].text = remainder
+            return
+        else:
+            para.runs[1].text = remainder
+            for extra in para.runs[2:]:
+                extra.text = ""
+            return
+
+    dominant_run = para.runs[0]
+    for r in para.runs:
+        if r.font and r.font.size is not None:
+            dominant_run = r
+            break
+
+    font_name = dominant_run.font.name or (para.font.name if para.font else None)
+    font_size = dominant_run.font.size or (para.font.size if para.font else None)
+    font_bold = dominant_run.font.bold if dominant_run.font.bold is not None else (para.font.bold if para.font else None)
+    font_italic = dominant_run.font.italic if dominant_run.font.italic is not None else (para.font.italic if para.font else None)
+    font_underline = dominant_run.font.underline if dominant_run.font.underline is not None else (para.font.underline if para.font else None)
+    color_rgb = None
+    try:
+        if dominant_run.font.color and dominant_run.font.color.type is not None:
+            color_rgb = dominant_run.font.color.rgb
+    except Exception:
+        pass
+
+    para.runs[0].text = new_text
+    for extra in para.runs[1:]:
+        extra.text = ""
+
+    if font_name:
+        para.runs[0].font.name = font_name
+    if font_size is not None:
+        para.runs[0].font.size = font_size
+    if font_bold is not None:
+        para.runs[0].font.bold = font_bold
+    if font_italic is not None:
+        para.runs[0].font.italic = font_italic
+    if font_underline is not None:
+        para.runs[0].font.underline = font_underline
+    if color_rgb is not None:
+        try:
+            para.runs[0].font.color.rgb = color_rgb
+        except Exception:
+            pass
 
 
 def get_block_bg_color(page, rect, text_color=(0.15, 0.15, 0.15)) -> Tuple[float, float, float]:
@@ -400,19 +575,26 @@ def humanize_pdf_in_place(
                 sizes = []
                 colors = []
                 bolds = []
+                italics = []
+                fonts = []
                 for line in b["lines"]:
                     for span in line.get("spans", []):
                         sizes.append(span.get("size", 11.0))
                         c = span.get("color", 0)
                         colors.append(((c >> 16 & 255) / 255.0, (c >> 8 & 255) / 255.0, (c & 255) / 255.0))
                         flags = span.get("flags", 0)
-                        bolds.append(bool(flags & 2 or "bold" in span.get("font", "").lower()))
+                        fn = span.get("font", "")
+                        fonts.append(fn)
+                        bolds.append(bool(flags & 2 or "bold" in fn.lower() or "black" in fn.lower() or "heavy" in fn.lower()))
+                        italics.append(bool(flags & 1 or "italic" in fn.lower() or "oblique" in fn.lower()))
                 if sizes:
-                    avg_size = sum(sizes) / len(sizes)
+                    avg_size = round(sum(sizes) / len(sizes), 1)
                     dom_color = colors[0] if colors else (0.15, 0.15, 0.15)
                     is_bold = any(bolds)
+                    is_italic = any(italics)
+                    font_str = fonts[0] if fonts else "helv"
                     key = tuple(round(x, 1) for x in b["bbox"])
-                    block_props[key] = (avg_size, dom_color, is_bold)
+                    block_props[key] = (avg_size, dom_color, is_bold, is_italic, font_str)
 
         blocks = page.get_text("blocks")
         all_obstacle_rects = []
@@ -427,14 +609,14 @@ def humanize_pdf_in_place(
                 continue
 
             key = tuple(round(x, 1) for x in b[:4])
-            props = block_props.get(key, (11.0, (0.15, 0.15, 0.15), False))
-            fsize, fcolor, is_bold = props
+            props = block_props.get(key, (11.0, (0.15, 0.15, 0.15), False, False, "helv"))
+            fsize, fcolor, is_bold, is_italic, font_str = props
 
             if is_heading_or_side_heading(text, rect=rect, page_height=page.rect.height, font_size=fsize, is_bold=is_bold):
                 all_humanized_paragraphs.append(text)
                 all_obstacle_rects.append(rect)
             else:
-                body_blocks_to_replace.append((rect, text, fsize, fcolor, is_bold))
+                body_blocks_to_replace.append((rect, text, fsize, fcolor, is_bold, is_italic, font_str))
 
         # Also collect all images on the page as obstacles so text never encroaches on pictures
         for img_info in page.get_images():
@@ -446,12 +628,13 @@ def humanize_pdf_in_place(
 
         if body_blocks_to_replace:
             replacements = []
-            for rect, text, fsize, fcolor, is_bold in body_blocks_to_replace:
+            for rect, text, fsize, fcolor, is_bold, is_italic, font_str in body_blocks_to_replace:
                 h_res = humanizer.humanize(
                     text,
                     tone=tone,
                     intensity=intensity,
-                    academic_shield=academic_shield
+                    academic_shield=academic_shield,
+                    preserve_pattern=True
                 )
                 hum_text = h_res["humanized_text"].strip()
                 all_humanized_paragraphs.append(hum_text)
@@ -476,7 +659,7 @@ def humanize_pdf_in_place(
                     if obs.y0 >= rect.y1 and not (obs.x1 <= rect.x0 or obs.x0 >= max_x1):
                         max_y1 = min(max_y1, max(rect.y1, obs.y0 - 6))
 
-                for other_rect, _, _, _, _ in body_blocks_to_replace:
+                for other_rect, _, _, _, _, _, _ in body_blocks_to_replace:
                     if other_rect.y0 >= rect.y1 and not (other_rect.x1 <= rect.x0 or other_rect.x0 >= max_x1):
                         max_y1 = min(max_y1, max(rect.y1, other_rect.y0 - 6))
 
@@ -499,21 +682,24 @@ def humanize_pdf_in_place(
                 )
                 page.add_redact_annot(wipe_rect, fill=bg_color)
 
-                replacements.append((safe_target_rect, hum_text, fsize, fcolor, bg_color))
+                fontname = map_pdf_fontname(font_str, is_bold=is_bold, is_italic=is_italic)
+                replacements.append((safe_target_rect, hum_text, fsize, fcolor, bg_color, fontname))
 
             # Apply all redactions cleanly in one pass, protecting 100% of images
             page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
 
-            # Insert all humanized replacements with guaranteed-fit font sizing and resilient fallback
-            for safe_rect, hum_text, fsize, fcolor, bg_color in replacements:
+            # Insert all humanized replacements with exact font sizing and font family preservation
+            for safe_rect, hum_text, fsize, fcolor, bg_color, fontname in replacements:
                 try:
-                    opt_size = fit_text_in_rect(safe_rect, hum_text, fsize)
-                    rc = page.insert_textbox(safe_rect, hum_text, fontsize=opt_size, color=fcolor, fontname="helv")
+                    # Prioritize exact original font size
+                    rc = page.insert_textbox(safe_rect, hum_text, fontsize=fsize, color=fcolor, fontname=fontname)
                     if rc < 0:
-                        page.insert_textbox(safe_rect, hum_text, fontsize=max(6.5, opt_size * 0.8), color=fcolor, fontname="helv")
-                except Exception as ins_err:
+                        opt_size = fit_text_in_rect(safe_rect, hum_text, fsize, fontname=fontname)
+                        page.insert_textbox(safe_rect, hum_text, fontsize=opt_size, color=fcolor, fontname=fontname)
+                except Exception:
                     try:
-                        page.insert_textbox(safe_rect, hum_text, fontsize=max(6.5, fsize * 0.75), color=fcolor, fontname="helv")
+                        opt_size = fit_text_in_rect(safe_rect, hum_text, fsize, fontname=fontname)
+                        page.insert_textbox(safe_rect, hum_text, fontsize=opt_size, color=fcolor, fontname=fontname)
                     except Exception:
                         pass
 
@@ -574,6 +760,13 @@ def humanize_pptx_in_place(
                     t = p.text.strip()
                     if t:
                         all_original_paragraphs.append(t)
+            elif shape.has_table:
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        for p in cell.text_frame.paragraphs:
+                            t = p.text.strip()
+                            if t:
+                                all_original_paragraphs.append(t)
 
     full_orig_text = "\n\n".join(all_original_paragraphs)
     if not full_orig_text.strip():
@@ -598,33 +791,64 @@ def humanize_pptx_in_place(
 
     for slide in prs.slides:
         for shape in slide.shapes:
-            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE or not shape.has_text_frame:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 continue
 
-            for para in shape.text_frame.paragraphs:
-                text = para.text.strip()
-                if not text:
-                    continue
+            if shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    text = para.text.strip()
+                    if not text:
+                        continue
 
-                is_bold = bool(para.font and para.font.bold)
-                fsize = para.font.size.pt if (para.font and para.font.size) else None
+                    is_bold = bool(para.font and para.font.bold)
+                    fsize = para.font.size.pt if (para.font and para.font.size) else None
 
-                if is_heading_or_side_heading(text, font_size=fsize, is_bold=is_bold):
-                    all_humanized_paragraphs.append(text)
-                    continue
+                    if is_heading_or_side_heading(text, font_size=fsize, is_bold=is_bold):
+                        all_humanized_paragraphs.append(text)
+                        continue
 
-                h_res = humanizer.humanize(
-                    text,
-                    tone=tone,
-                    intensity=intensity,
-                    academic_shield=academic_shield
-                )
-                hum_text = h_res["humanized_text"].strip()
-                all_humanized_paragraphs.append(hum_text)
-                total_changes.extend(h_res.get("changes_applied", []))
-                total_shielded += h_res.get("shielded_items_count", 0)
+                    h_res = humanizer.humanize(
+                        text,
+                        tone=tone,
+                        intensity=intensity,
+                        academic_shield=academic_shield,
+                        preserve_pattern=True
+                    )
+                    hum_text = h_res["humanized_text"].strip()
+                    all_humanized_paragraphs.append(hum_text)
+                    total_changes.extend(h_res.get("changes_applied", []))
+                    total_shielded += h_res.get("shielded_items_count", 0)
 
-                para.text = hum_text
+                    update_pptx_paragraph_preserve_runs(para, hum_text)
+
+            elif shape.has_table:
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        for para in cell.text_frame.paragraphs:
+                            text = para.text.strip()
+                            if not text:
+                                continue
+
+                            is_bold = bool(para.font and para.font.bold)
+                            fsize = para.font.size.pt if (para.font and para.font.size) else None
+
+                            if is_heading_or_side_heading(text, font_size=fsize, is_bold=is_bold):
+                                all_humanized_paragraphs.append(text)
+                                continue
+
+                            h_res = humanizer.humanize(
+                                text,
+                                tone=tone,
+                                intensity=intensity,
+                                academic_shield=academic_shield,
+                                preserve_pattern=True
+                            )
+                            hum_text = h_res["humanized_text"].strip()
+                            all_humanized_paragraphs.append(hum_text)
+                            total_changes.extend(h_res.get("changes_applied", []))
+                            total_shielded += h_res.get("shielded_items_count", 0)
+
+                            update_pptx_paragraph_preserve_runs(para, hum_text)
 
     out_stream = io.BytesIO()
     prs.save(out_stream)
@@ -678,6 +902,14 @@ def humanize_docx_in_place(
         if t:
             all_original_paragraphs.append(t)
 
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    t = p.text.strip()
+                    if t:
+                        all_original_paragraphs.append(t)
+
     full_orig_text = "\n\n".join(all_original_paragraphs)
     if not full_orig_text.strip():
         raise ValueError("Word document contains no text paragraphs.")
@@ -717,14 +949,38 @@ def humanize_docx_in_place(
             t,
             tone=tone,
             intensity=intensity,
-            academic_shield=academic_shield
+            academic_shield=academic_shield,
+            preserve_pattern=True
         )
         hum_text = h_res["humanized_text"].strip()
         all_humanized_paragraphs.append(hum_text)
         total_changes.extend(h_res.get("changes_applied", []))
         total_shielded += h_res.get("shielded_items_count", 0)
 
-        p.text = hum_text
+        update_docx_paragraph_preserve_runs(p, hum_text)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    t = p.text.strip()
+                    if not t:
+                        continue
+                    if is_heading_or_side_heading(t):
+                        continue
+                    h_res = humanizer.humanize(
+                        t,
+                        tone=tone,
+                        intensity=intensity,
+                        academic_shield=academic_shield,
+                        preserve_pattern=True
+                    )
+                    hum_text = h_res["humanized_text"].strip()
+                    all_humanized_paragraphs.append(hum_text)
+                    total_changes.extend(h_res.get("changes_applied", []))
+                    total_shielded += h_res.get("shielded_items_count", 0)
+
+                    update_docx_paragraph_preserve_runs(p, hum_text)
 
     out_stream = io.BytesIO()
     doc.save(out_stream)
@@ -793,12 +1049,13 @@ def humanize_document_structured(
             # Preserve headings and side headings intact without applying body sentence transformations
             humanized_blocks.append(block_clean)
         else:
-            # Run convergent humanizer on this paragraph
+            # Run convergent humanizer on this paragraph preserving patterns
             h_res = humanizer.humanize(
                 block_clean,
                 tone=tone,
                 intensity=intensity,
-                academic_shield=academic_shield
+                academic_shield=academic_shield,
+                preserve_pattern=True
             )
             humanized_blocks.append(h_res["humanized_text"])
             total_changes.extend(h_res.get("changes_applied", []))

@@ -232,12 +232,14 @@ class AIHumanizer:
         intensity: str = "balanced",
         use_ollama: bool = False,
         ollama_model: str = "llama3",
-        academic_shield: bool = True
+        academic_shield: bool = True,
+        preserve_pattern: bool = True
     ) -> Dict[str, Any]:
         """
         Humanizes AI-generated text by altering cadence, breaking monotonous rhythms,
         and eliminating recognizable LLM tropes to achieve human scores (< 20% AI).
         Preserves citations & quotes when academic_shield is True.
+        Preserves bullet patterns, numbering, casing, and font size layout when preserve_pattern is True.
         Utilizes Single-Click Deep Convergence to guarantee human scores in a single request.
         """
         text = text.strip() if text else ""
@@ -253,19 +255,82 @@ class AIHumanizer:
                 "source": "empty"
             }
 
+        # Multi-line handling: preserve exact line breaks and patterns
+        if "\n" in text and preserve_pattern:
+            lines = text.split("\n")
+            hum_lines = []
+            all_changes = []
+            total_shielded = 0
+            for line in lines:
+                if not line.strip():
+                    hum_lines.append(line)
+                    continue
+                h_line = self.humanize(
+                    line,
+                    tone=tone,
+                    intensity=intensity,
+                    use_ollama=use_ollama,
+                    ollama_model=ollama_model,
+                    academic_shield=academic_shield,
+                    preserve_pattern=preserve_pattern
+                )
+                hum_lines.append(h_line["humanized_text"])
+                all_changes.extend(h_line.get("changes_applied", []))
+                total_shielded += h_line.get("shielded_items_count", 0)
+
+            return {
+                "original_text": text,
+                "humanized_text": "\n".join(hum_lines),
+                "changes_applied": list(dict.fromkeys(all_changes))[:10],
+                "tone": tone,
+                "intensity": intensity,
+                "shielded_items_count": total_shielded,
+                "convergence_passes": 1,
+                "source": "heuristic_engine"
+            }
+
+        bullet_prefix = ""
+        label_prefix = ""
+        core_text = text
+        has_trailing_period = text.rstrip().endswith((".", "!", "?"))
+
+        if preserve_pattern:
+            bullet_match = re.match(r'^(\s*(?:[\u2022\u2023\u25E6\u2043\u2219\*\-\—▪▫]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)]))\s+', text)
+            if bullet_match:
+                bullet_prefix = bullet_match.group(0)
+                core_text = text[len(bullet_prefix):]
+
+            label_match = re.match(r'^([A-Z][A-Za-z0-9\s/&]{1,35}\s*[:\-–—]\s*)', core_text)
+            if label_match and len(label_match.group(1).split()) <= 4:
+                label_prefix = label_match.group(1)
+                core_text = core_text[len(label_prefix):]
+
         if use_ollama:
-            llm_result = self._try_ollama_humanize(text, tone, intensity, ollama_model, academic_shield)
+            llm_result = self._try_ollama_humanize(core_text, tone, intensity, ollama_model, academic_shield)
             if llm_result:
+                hum_body = llm_result["humanized_text"].strip()
+                if preserve_pattern and not has_trailing_period and hum_body.endswith("."):
+                    hum_body = hum_body[:-1]
+                llm_result["original_text"] = text
+                llm_result["humanized_text"] = f"{bullet_prefix}{label_prefix}{hum_body}"
                 return llm_result
 
-        return self._convergent_humanize(text, tone, intensity, academic_shield)
+        res = self._convergent_humanize(core_text, tone, intensity, academic_shield, preserve_pattern=preserve_pattern)
+        hum_body = res["humanized_text"].strip()
+        if preserve_pattern and not has_trailing_period and hum_body.endswith("."):
+            hum_body = hum_body[:-1]
+
+        res["original_text"] = text
+        res["humanized_text"] = f"{bullet_prefix}{label_prefix}{hum_body}"
+        return res
 
     def _convergent_humanize(
         self,
         text: str,
         tone: str,
         intensity: str,
-        academic_shield: bool = True
+        academic_shield: bool = True,
+        preserve_pattern: bool = True
     ) -> Dict[str, Any]:
         """
         Single-Click Closed-Loop Convergence Engine:
@@ -313,7 +378,7 @@ class AIHumanizer:
 
             if iteration == 0:
                 # Pass 1: Standard heuristic humanization
-                p1_res = self._heuristic_humanize(modified, tone, intensity, academic_shield=False)
+                p1_res = self._heuristic_humanize(modified, tone, intensity, academic_shield=False, preserve_pattern=preserve_pattern)
                 modified = p1_res["humanized_text"]
                 all_changes.extend(p1_res["changes_applied"])
             elif iteration == 1:
@@ -381,13 +446,14 @@ class AIHumanizer:
                         sents[-2] = f"{anchor}{penult[0].lower() + penult[1:] if len(penult) > 1 else penult}"
                         p3_changes.append("Added natural contextual anchor")
 
-                # Ensure at least one cadence punchline exists
-                has_punch = any(p in " ".join(sents).lower() for p in ALL_PUNCHLINE_ROOTS)
-                if not has_punch:
-                    pool = CADENCE_PUNCH_LINES.get(tone, CADENCE_PUNCH_LINES["natural"])
-                    if pool:
-                        sents.insert(len(sents) // 2, pool[0])
-                        p3_changes.append(f"Injected cadence punch: '{pool[0]}'")
+                # Ensure at least one cadence punchline exists (only when preserve_pattern is False)
+                if not preserve_pattern:
+                    has_punch = any(p in " ".join(sents).lower() for p in ALL_PUNCHLINE_ROOTS)
+                    if not has_punch:
+                        pool = CADENCE_PUNCH_LINES.get(tone, CADENCE_PUNCH_LINES["natural"])
+                        if pool:
+                            sents.insert(len(sents) // 2, pool[0])
+                            p3_changes.append(f"Injected cadence punch: '{pool[0]}'")
 
                 modified = " ".join(sents)
                 modified = re.sub(r'\s+', ' ', modified).strip()
@@ -433,7 +499,7 @@ class AIHumanizer:
         }
 
 
-    def _heuristic_humanize(self, text: str, tone: str, intensity: str, academic_shield: bool = True) -> Dict[str, Any]:
+    def _heuristic_humanize(self, text: str, tone: str, intensity: str, academic_shield: bool = True, preserve_pattern: bool = True) -> Dict[str, Any]:
         tone = tone.lower() if tone in ["natural", "academic", "professional", "creative"] else "natural"
         intensity = intensity.lower() if intensity in ["mild", "balanced", "aggressive"] else "balanced"
 
@@ -514,17 +580,18 @@ class AIHumanizer:
 
             restructured_sentences.append(sent)
 
-            # Inject a short punchline to maximize burstiness standard deviation
-            punch_count = sum(1 for p in ALL_PUNCHLINE_ROOTS if p in " ".join(restructured_sentences).lower())
-            max_punches = 2 if (intensity == "aggressive" and len(raw_sentences) >= 6) else (1 if not has_existing_punch else 0)
-            if punch_count < max_punches:
-                if (intensity == "aggressive" and idx == 0 and len(raw_sentences) >= 2) or \
-                   (intensity == "aggressive" and idx == len(raw_sentences) - 2 and len(raw_sentences) >= 6) or \
-                   (intensity == "balanced" and idx == 1 and len(raw_sentences) >= 3):
-                    if punch_pool:
-                        punch = punch_pool.pop()
-                        restructured_sentences.append(punch)
-                        changes_applied.append(f"Injected high-burstiness punch: '{punch}'")
+            # Inject a short punchline only when preserve_pattern is False
+            if not preserve_pattern:
+                punch_count = sum(1 for p in ALL_PUNCHLINE_ROOTS if p in " ".join(restructured_sentences).lower())
+                max_punches = 2 if (intensity == "aggressive" and len(raw_sentences) >= 6) else (1 if not has_existing_punch else 0)
+                if punch_count < max_punches:
+                    if (intensity == "aggressive" and idx == 0 and len(raw_sentences) >= 2) or \
+                       (intensity == "aggressive" and idx == len(raw_sentences) - 2 and len(raw_sentences) >= 6) or \
+                       (intensity == "balanced" and idx == 1 and len(raw_sentences) >= 3):
+                        if punch_pool:
+                            punch = punch_pool.pop()
+                            restructured_sentences.append(punch)
+                            changes_applied.append(f"Injected high-burstiness punch: '{punch}'")
 
 
 
