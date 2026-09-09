@@ -764,55 +764,79 @@ async function processUploadedFile(file) {
     try {
         const isPdf = ext === 'pdf' || mime === 'application/pdf';
         const isDocx = ext === 'docx' || ext === 'doc' || mime.includes('wordprocessingml') || mime.includes('msword') || mime.includes('officedocument');
+        const isPptx = ext === 'pptx' || ext === 'ppt' || mime.includes('presentationml') || mime.includes('powerpoint');
 
-        if (isPdf) {
-            if (typeof pdfjsLib === 'undefined') {
-                showToast('PDF reader library is loading, please try again in a moment.');
-                return;
-            }
+        // 1. Primary path: Fast, robust server extraction via PyMuPDF / python-docx / python-pptx
+        if (isPdf || isDocx || isPptx) {
             try {
-                if (pdfjsLib.GlobalWorkerOptions) {
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                const formData = new FormData();
+                formData.append('file', file);
+                const resp = await fetch('/api/document/extract', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (resp.ok) {
+                    const extData = await resp.json();
+                    if (extData && extData.text && extData.text.trim()) {
+                        applyExtractedText(extData.text.trim(), `Loaded ${fileName}`);
+                        return;
+                    }
+                } else {
+                    const errJson = await resp.json().catch(() => ({}));
+                    if (errJson && errJson.detail) {
+                        showToast(`Notice: ${errJson.detail}`);
+                    }
                 }
-            } catch (wErr) {
-                console.warn('PDF.js worker initialization notice:', wErr);
+            } catch (srvErr) {
+                console.warn('Server extraction fallback to client parser:', srvErr);
             }
+        }
 
-            const rawBuffer = await readFileAsArrayBuffer(file);
-            const uint8Data = new Uint8Array(rawBuffer);
-            const loadingTask = pdfjsLib.getDocument({ data: uint8Data });
-            const pdfDoc = await loadingTask.promise;
-
-            let fullText = '';
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
+        // 2. Client-side fallback for PDF
+        if (isPdf) {
+            if (typeof pdfjsLib !== 'undefined') {
                 try {
-                    const page = await pdfDoc.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    fullText += pageText + '\n\n';
-                } catch (pageErr) {
-                    console.warn(`Could not extract page ${i}:`, pageErr);
+                    if (pdfjsLib.GlobalWorkerOptions) {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    }
+                    const rawBuffer = await readFileAsArrayBuffer(file);
+                    const uint8Data = new Uint8Array(rawBuffer);
+                    const loadingTask = pdfjsLib.getDocument({ data: uint8Data });
+                    const pdfDoc = await loadingTask.promise;
+                    let fullText = '';
+                    for (let i = 1; i <= pdfDoc.numPages; i++) {
+                        try {
+                            const page = await pdfDoc.getPage(i);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map(item => item.str).join(' ');
+                            fullText += pageText + '\n\n';
+                        } catch (pageErr) {
+                            console.warn(`Could not extract page ${i}:`, pageErr);
+                        }
+                    }
+                    fullText = fullText.trim();
+                    if (fullText) {
+                        applyExtractedText(fullText, `Loaded ${fileName} (${pdfDoc.numPages} pages)`);
+                        return;
+                    }
+                } catch (pdfErr) {
+                    console.warn('Client-side PDF.js failed:', pdfErr);
                 }
             }
-            fullText = fullText.trim();
-            if (!fullText) {
-                showToast('Could not extract text from PDF (it may contain scanned images rather than text).');
-                return;
-            }
-            applyExtractedText(fullText, `Loaded ${fileName} (${pdfDoc.numPages} pages)`);
+            throw new Error('Could not extract text from PDF. It may contain scanned images rather than selectable text.');
         } else if (isDocx) {
-            if (typeof mammoth === 'undefined') {
-                showToast('Word document reader is loading, please try again in a moment.');
-                return;
+            if (typeof mammoth !== 'undefined') {
+                const rawBuffer = await readFileAsArrayBuffer(file);
+                const result = await mammoth.extractRawText({ arrayBuffer: rawBuffer });
+                const text = (result && result.value) ? result.value.trim() : '';
+                if (text) {
+                    applyExtractedText(text, `Loaded ${fileName}`);
+                    return;
+                }
             }
-            const rawBuffer = await readFileAsArrayBuffer(file);
-            const result = await mammoth.extractRawText({ arrayBuffer: rawBuffer });
-            const text = (result && result.value) ? result.value.trim() : '';
-            if (!text) {
-                showToast('Could not extract readable text from .docx file.');
-                return;
-            }
-            applyExtractedText(text, `Loaded ${fileName}`);
+            throw new Error('Could not extract readable text from Word document.');
+        } else if (isPptx) {
+            throw new Error('Please use the "Upload & Humanize Document" studio above for PowerPoint presentations.');
         } else {
             // Text, markdown, or generic plain text
             const text = await readFileAsText(file);

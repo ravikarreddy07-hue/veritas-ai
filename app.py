@@ -191,6 +191,40 @@ async def humanize_text(req: HumanizeRequest):
         }
     })
 
+@app.post("/api/document/extract")
+async def extract_document_endpoint(
+    file: UploadFile = File(...)
+):
+    """
+    Direct document text extraction endpoint.
+    Used by quick upload & client drag-and-drop to reliably extract text from
+    PDF, Word (.docx), PowerPoint (.pptx), and Text documents via PyMuPDF / python-docx.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+
+    try:
+        file_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(e)}")
+
+    clean_filename = sanitize_filename(file.filename)
+    try:
+        extraction = extract_text_from_document(file_bytes, clean_filename)
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Error extracting document text: {str(err)}")
+
+    return JSONResponse(content={
+        "status": "success",
+        "filename": clean_filename,
+        "text": extraction["text"],
+        "paragraphs": extraction.get("paragraphs", []),
+        "format": extraction.get("format", "unknown"),
+        "page_count": extraction.get("page_count", 1)
+    })
+
 @app.post("/api/document/process")
 async def process_document_endpoint(
     file: UploadFile = File(...),

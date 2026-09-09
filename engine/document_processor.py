@@ -89,30 +89,45 @@ def extract_text_from_document(file_bytes: bytes, filename: str) -> Dict[str, An
 
     if ext == ".pdf":
         try:
-            reader = PdfReader(io.BytesIO(file_bytes))
-            page_count = len(reader.pages)
+            doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+            page_count = len(doc)
             if page_count == 0:
+                doc.close()
                 raise ValueError("PDF document contains no readable pages.")
                 
             page_texts = []
-            for i, page in enumerate(reader.pages):
-                pt = page.extract_text() or ""
+            paragraphs = []
+            for page in doc:
+                pt = page.get_text() or ""
                 if pt.strip():
                     page_texts.append(pt.strip())
-                    
+                blocks = page.get_text("blocks")
+                for b in blocks:
+                    if b[6] == 0 and b[4].strip():
+                        paragraphs.append(b[4].strip())
+            doc.close()
+            
+            # If pymupdf found no text, try pypdf as fallback
+            if not page_texts:
+                try:
+                    reader = PdfReader(io.BytesIO(file_bytes))
+                    for page in reader.pages:
+                        pt = page.extract_text() or ""
+                        if pt.strip():
+                            page_texts.append(pt.strip())
+                            paragraphs.append(pt.strip())
+                except Exception:
+                    pass
+
             if not page_texts:
                 raise ValueError(
                     "No readable text could be extracted from this PDF. It may contain scanned images rather than selectable text."
                 )
                 
-            # Join pages with double newlines
-            full_text = "\n\n".join(page_texts)
-            # Break down into paragraphs
-            paragraphs = [p.strip() for p in re.split(r'\n{2,}', full_text) if p.strip()]
-            
+            full_text = "\n\n".join(paragraphs if paragraphs else page_texts)
             return {
                 "text": full_text,
-                "paragraphs": paragraphs if paragraphs else [full_text],
+                "paragraphs": paragraphs if paragraphs else [p.strip() for p in re.split(r'\n{2,}', full_text) if p.strip()],
                 "page_count": page_count,
                 "format": "pdf"
             }
@@ -143,7 +158,10 @@ def extract_text_from_document(file_bytes: bytes, filename: str) -> Dict[str, An
         except Exception as e:
             if isinstance(e, ValueError):
                 raise
-            raise ValueError(f"Failed to read Word document (.docx): {str(e)}")
+            err_str = str(e)
+            if "Package not found" in err_str or "not a Word file" in err_str:
+                raise ValueError("The uploaded file appears to be a legacy Word .doc binary file. Please save or export it as a modern Word .docx or PDF document before uploading.")
+            raise ValueError(f"Failed to read Word document (.docx): {err_str}")
 
     elif ext in [".pptx", ".ppt"]:
         try:
@@ -171,7 +189,10 @@ def extract_text_from_document(file_bytes: bytes, filename: str) -> Dict[str, An
         except Exception as e:
             if isinstance(e, ValueError):
                 raise
-            raise ValueError(f"Failed to read PowerPoint presentation: {str(e)}")
+            err_str = str(e)
+            if "Package not found" in err_str:
+                raise ValueError("The uploaded file appears to be a legacy PowerPoint .ppt binary file. Please save or export it as a modern PowerPoint .pptx or PDF document before uploading.")
+            raise ValueError(f"Failed to read PowerPoint presentation: {err_str}")
 
     else:
         # Text or Markdown
@@ -291,19 +312,28 @@ def fit_text_in_rect(rect, text: str, base_size: float, fontname: str = "helv") 
     Tests font scaling on a temporary scratch canvas to find the optimal font size
     where text fits completely (rc >= 0) without any clipping, overflow, or collision.
     """
+    width = max(30.0, float(abs(rect.width)))
+    height = max(20.0, float(abs(rect.height)))
     temp_doc = pymupdf.open()
-    temp_page = temp_doc.new_page(width=rect.width + 100, height=rect.height + 100)
-    temp_rect = pymupdf.Rect(10, 10, 10 + rect.width, 10 + rect.height)
-    best_size = base_size
-    for scale in [1.0, 0.96, 0.92, 0.88, 0.84, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55]:
-        sz = max(6.5, round(base_size * scale, 1))
-        rc = temp_page.insert_textbox(temp_rect, text, fontsize=sz, fontname=fontname)
-        if rc >= 0:
+    try:
+        temp_page = temp_doc.new_page(width=width + 100, height=height + 100)
+        temp_rect = pymupdf.Rect(10, 10, 10 + width, 10 + height)
+        best_size = base_size
+        for scale in [1.0, 0.96, 0.92, 0.88, 0.84, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55]:
+            sz = max(6.5, round(base_size * scale, 1))
+            try:
+                rc = temp_page.insert_textbox(temp_rect, text, fontsize=sz, fontname=fontname)
+                if rc >= 0:
+                    best_size = sz
+                    break
+            except Exception:
+                pass
             best_size = sz
-            break
-        best_size = sz
-    temp_doc.close()
-    return best_size
+        return best_size
+    except Exception:
+        return base_size
+    finally:
+        temp_doc.close()
 
 
 def humanize_pdf_in_place(
@@ -428,28 +458,45 @@ def humanize_pdf_in_place(
                 total_changes.extend(h_res.get("changes_applied", []))
                 total_shielded += h_res.get("shielded_items_count", 0)
 
-                # Calculate safe target rect bounded by obstacles (no collisions)
-                max_x1 = page.rect.width - 20
-                for obs in all_obstacle_rects:
-                    if obs.x0 > rect.x0 and not (obs.y1 <= rect.y0 or obs.y0 >= rect.y1):
-                        max_x1 = min(max_x1, obs.x0 - 15)
+                # Calculate safe target rect bounded by obstacles (strictly never inverted or smaller than original)
+                min_w = max(20.0, float(rect.width))
+                min_h = max(14.0, float(rect.height))
 
-                max_y1 = page.rect.height - 20
+                # Start with available space to the right
+                max_x1 = max(rect.x1, page.rect.width - 20)
                 for obs in all_obstacle_rects:
+                    # Only obstacles strictly to the right of this block's right edge
+                    if obs.x0 >= rect.x1 and not (obs.y1 <= rect.y0 or obs.y0 >= rect.y1):
+                        max_x1 = min(max_x1, max(rect.x1, obs.x0 - 10))
+
+                # Vertical boundary
+                max_y1 = max(rect.y1, page.rect.height - 20)
+                for obs in all_obstacle_rects:
+                    # Only obstacles strictly below this block's bottom edge
                     if obs.y0 >= rect.y1 and not (obs.x1 <= rect.x0 or obs.x0 >= max_x1):
-                        max_y1 = min(max_y1, obs.y0 - 8)
+                        max_y1 = min(max_y1, max(rect.y1, obs.y0 - 6))
 
                 for other_rect, _, _, _, _ in body_blocks_to_replace:
                     if other_rect.y0 >= rect.y1 and not (other_rect.x1 <= rect.x0 or other_rect.x0 >= max_x1):
-                        max_y1 = min(max_y1, other_rect.y0 - 8)
+                        max_y1 = min(max_y1, max(rect.y1, other_rect.y0 - 6))
 
-                safe_target_rect = pymupdf.Rect(rect.x0, rect.y0, max_x1, max(rect.y1, max_y1))
+                safe_target_rect = pymupdf.Rect(
+                    rect.x0,
+                    rect.y0,
+                    max(rect.x0 + min_w, max_x1),
+                    max(rect.y0 + min_h, max_y1)
+                )
 
                 # Detect matching background color
                 bg_color = get_block_bg_color(page, rect, fcolor)
 
-                # Wipe the old text cleanly with background fill (padded by 1.5pt)
-                wipe_rect = pymupdf.Rect(rect.x0 - 1.5, rect.y0 - 1.5, rect.x1 + 1.5, rect.y1 + 1.5)
+                # Wipe the old text cleanly with background fill (padded by 1.5pt, clamped to page boundaries)
+                wipe_rect = pymupdf.Rect(
+                    max(0.0, rect.x0 - 1.5),
+                    max(0.0, rect.y0 - 1.5),
+                    min(page.rect.width, rect.x1 + 1.5),
+                    min(page.rect.height, rect.y1 + 1.5)
+                )
                 page.add_redact_annot(wipe_rect, fill=bg_color)
 
                 replacements.append((safe_target_rect, hum_text, fsize, fcolor, bg_color))
@@ -457,10 +504,18 @@ def humanize_pdf_in_place(
             # Apply all redactions cleanly in one pass, protecting 100% of images
             page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
 
-            # Insert all humanized replacements with guaranteed-fit font sizing
+            # Insert all humanized replacements with guaranteed-fit font sizing and resilient fallback
             for safe_rect, hum_text, fsize, fcolor, bg_color in replacements:
-                opt_size = fit_text_in_rect(safe_rect, hum_text, fsize)
-                page.insert_textbox(safe_rect, hum_text, fontsize=opt_size, color=fcolor, fontname="helv")
+                try:
+                    opt_size = fit_text_in_rect(safe_rect, hum_text, fsize)
+                    rc = page.insert_textbox(safe_rect, hum_text, fontsize=opt_size, color=fcolor, fontname="helv")
+                    if rc < 0:
+                        page.insert_textbox(safe_rect, hum_text, fontsize=max(6.5, opt_size * 0.8), color=fcolor, fontname="helv")
+                except Exception as ins_err:
+                    try:
+                        page.insert_textbox(safe_rect, hum_text, fontsize=max(6.5, fsize * 0.75), color=fcolor, fontname="helv")
+                    except Exception:
+                        pass
 
     output_pdf_bytes = doc.tobytes()
     doc.close()
