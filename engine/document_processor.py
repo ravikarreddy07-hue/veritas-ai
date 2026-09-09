@@ -836,23 +836,15 @@ def generate_docx_document(paragraphs: List[str], title: str = "Humanized Docume
         section.left_margin = Inches(1.0)
         section.right_margin = Inches(1.0)
 
-    # Document Header Title
-    title_p = doc.add_paragraph()
-    title_run = title_p.add_run(title)
-    title_run.font.name = 'Calibri'
-    title_run.font.size = Pt(18)
-    title_run.font.bold = True
-    title_run.font.color.rgb = RGBColor(30, 41, 59)
-    title_p.paragraph_format.space_after = Pt(4)
-
-    # Subtitle / Metadata
-    sub_p = doc.add_paragraph()
-    sub_run = sub_p.add_run("Processed with Veritas AI • Verified Human Cadence & Authenticity")
-    sub_run.font.name = 'Calibri'
-    sub_run.font.size = Pt(9.5)
-    sub_run.font.italic = True
-    sub_run.font.color.rgb = RGBColor(100, 116, 139)
-    sub_p.paragraph_format.space_after = Pt(16)
+    # Document Header Title (only if a specific custom title is provided)
+    if title and title not in ("Humanized Document", "Humanized Text"):
+        title_p = doc.add_paragraph()
+        title_run = title_p.add_run(title)
+        title_run.font.name = 'Calibri'
+        title_run.font.size = Pt(16)
+        title_run.font.bold = True
+        title_run.font.color.rgb = RGBColor(15, 23, 42)
+        title_p.paragraph_format.space_after = Pt(12)
 
     # Add paragraphs with formatting
     for p_text in paragraphs:
@@ -888,35 +880,26 @@ def generate_docx_document(paragraphs: List[str], title: str = "Humanized Docume
 
 
 class VeritasPDF(FPDF):
-    """Custom FPDF subclass with professional header and footer."""
+    """Clean FPDF subclass with standard page numbering and no watermarks."""
     def footer(self):
         self.set_y(-15)
-        self.set_font("Helvetica", "I", 8)
+        self.set_font("Helvetica", "", 8)
         self.set_text_color(148, 163, 184)
-        self.cell(0, 10, f"Veritas AI Verified Human Document - Page {self.page_no()}", align="C")
+        self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
 
 def generate_pdf_document(paragraphs: List[str], title: str = "Humanized Document") -> bytes:
-    """Generates a professional, print-ready PDF document using FPDF2."""
+    """Generates a clean, professional, watermark-free PDF document using FPDF2."""
     pdf = VeritasPDF()
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
     
-    # Document Title
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 8, title[:60], new_x="LMARGIN", new_y="NEXT")
-    
-    # Subtitle
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.set_text_color(100, 116, 139)
-    pdf.cell(0, 6, "Processed with Veritas AI - Verified Human Cadence & Authenticity", new_x="LMARGIN", new_y="NEXT")
-    
-    # Divider Rule
-    pdf.set_draw_color(226, 232, 240)
-    pdf.set_line_width(0.4)
-    pdf.line(pdf.get_x(), pdf.get_y() + 2, pdf.get_x() + 190, pdf.get_y() + 2)
-    pdf.ln(6)
+    # Optional Document Title (only if a specific custom title is provided)
+    if title and title not in ("Humanized Document", "Humanized Text"):
+        pdf.set_font("Helvetica", "B", 15)
+        pdf.set_text_color(15, 23, 42)
+        pdf.cell(0, 8, title[:60], new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
 
     # Body formatting
     pdf.set_text_color(30, 41, 59)
