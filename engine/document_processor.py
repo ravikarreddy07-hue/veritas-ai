@@ -256,6 +256,10 @@ def is_heading_or_side_heading(
     if font_size and font_size >= 16.0 and len(words) <= 10 and not has_terminal_punct:
         return True
 
+    # Captions, figures, and table labels (e.g. "Figure 1: ...", "Table 2: ...", "Source: ...")
+    if re.match(r'^(?:Figure|Fig\.?|Table|Chart|Exhibit|Plate|Diagram|Source|Photo|Image)\s*[0-9A-Za-z\.\:\-–—]', t, re.I):
+        return True
+
     # Side-heading labels ending in colon (e.g. "Key Observations:", "Strategy Overview:")
     if t.endswith(":") and len(words) <= 9:
         return True
@@ -822,7 +826,7 @@ def humanize_pptx_in_place(
                     update_pptx_paragraph_preserve_runs(para, hum_text)
 
             elif shape.has_table:
-                for row in shape.table.rows:
+                for row_idx, row in enumerate(shape.table.rows):
                     for cell in row.cells:
                         for para in cell.text_frame.paragraphs:
                             text = para.text.strip()
@@ -832,7 +836,8 @@ def humanize_pptx_in_place(
                             is_bold = bool(para.font and para.font.bold)
                             fsize = para.font.size.pt if (para.font and para.font.size) else None
 
-                            if is_heading_or_side_heading(text, font_size=fsize, is_bold=is_bold):
+                            # Table header row (row 0) is strictly preserved intact
+                            if row_idx == 0 or is_heading_or_side_heading(text, font_size=fsize, is_bold=is_bold):
                                 all_humanized_paragraphs.append(text)
                                 continue
 
@@ -960,13 +965,14 @@ def humanize_docx_in_place(
         update_docx_paragraph_preserve_runs(p, hum_text)
 
     for table in doc.tables:
-        for row in table.rows:
+        for row_idx, row in enumerate(table.rows):
             for cell in row.cells:
                 for p in cell.paragraphs:
                     t = p.text.strip()
                     if not t:
                         continue
-                    if is_heading_or_side_heading(t):
+                    # Table header row (row 0) is strictly preserved intact
+                    if row_idx == 0 or is_heading_or_side_heading(t):
                         continue
                     h_res = humanizer.humanize(
                         t,
