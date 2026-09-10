@@ -59,6 +59,7 @@ function initKeyboardShortcuts() {
         if (e.key === 'Escape') {
             closeRerollPopover();
             closeAuditCertificate();
+            closeRulesModal();
             hideSentenceTooltip();
         }
 
@@ -1733,6 +1734,23 @@ function closeAuditCertificate() {
 
 function printCertificate() {
     window.print();
+}
+
+function openRulesModal() {
+    const modal = document.getElementById('rules-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        lucide.createIcons();
+    }
+}
+
+function closeRulesModal() {
+    const modal = document.getElementById('rules-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
 }
 
 // ================= 10. HELPERS =================
