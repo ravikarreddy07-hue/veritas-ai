@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi>=0.110.0
 uvicorn>=0.28.0
 numpy>=1.26.0
@@ -11,4 +12,9 @@ pypdf>=4.0.0
 fpdf2>=2.7.9
 pymupdf>=1.24.0
 python-pptx>=1.0.0
-
+psutil>=5.9.0
+torch>=2.2.0
+transformers>=4.40.0
+safetensors>=0.4.0
+sentencepiece>=0.2.0
+accelerate>=0.28.0

@@ -46,6 +46,16 @@ app.add_middleware(
 detector = AIDetector()
 humanizer = AIHumanizer()
 
+@app.on_event("startup")
+async def startup_event():
+    """Warm up the neural AI detection model into memory at startup."""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, detector._ensure_model_loaded)
+    except Exception as e:
+        print(f"Startup model warm-up notice: {e}")
+
 # Ensure directories exist
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -124,7 +134,7 @@ async def detect_text(req: DetectRequest):
     """Analyzes text paragraph for AI vs Human characteristics."""
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
-    result = detector.analyze(req.text)
+    result = await detector.analyze_async(req.text)
     return JSONResponse(content=result)
 
 @app.post("/api/humanize")
@@ -136,8 +146,8 @@ async def humanize_text(req: HumanizeRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
     
-    # 1. Analyze original
-    original_analysis = detector.analyze(req.text)
+    # 1. Analyze original asynchronously
+    original_analysis = await detector.analyze_async(req.text)
 
     # 2. Humanize
     h_result = humanizer.humanize(
@@ -149,8 +159,8 @@ async def humanize_text(req: HumanizeRequest):
         academic_shield=req.academic_shield
     )
 
-    # 3. Analyze newly humanized text
-    humanized_analysis = detector.analyze(h_result["humanized_text"])
+    # 3. Analyze newly humanized text asynchronously
+    humanized_analysis = await detector.analyze_async(h_result["humanized_text"])
 
     # Double-check anti-regression guarantee: never output higher AI score than original
     if humanized_analysis["ai_percentage"] > original_analysis["ai_percentage"]:
