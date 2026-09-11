@@ -30,14 +30,24 @@ class AIDetector:
         """
         text = text.strip() if text else ""
         if not text or len(text.split()) < 5:
+            word_c = len(text.split()) if text else 0
             return {
+                "fakePercentage": 0.0,
                 "ai_percentage": 0,
                 "human_percentage": 100,
+                "is_human_written": True,
+                "is_gpt_generated": False,
+                "feedback_message": "Please enter at least a complete sentence or paragraph (minimum 5 words) for analysis.",
                 "verdict": "Insufficient Text",
                 "verdict_color": "text-gray-400",
                 "confidence": "Low",
+                "textWords": word_c,
+                "aiWords": 0,
                 "sentences": [],
                 "metrics": {
+                    "word_count": word_c,
+                    "sentence_count": 0,
+                    "ai_words": 0,
                     "burstiness_score": 0.0,
                     "entropy_score": 0.0,
                     "ttr": 0.0,
@@ -183,16 +193,25 @@ class AIDetector:
             s_score = max(2.0, min(98.0, s_score))
             sentence_scores.append(s_score)
 
-            # Classification thresholds: Green (< 40%), Yellow (40% - 65%), Red (>= 65%)
+            # Classification thresholds matching ZeroGPT:
+            # Red (>= 65%): AI / GPT Generated
+            # Yellow (40% - 64%): Mixed / partial AI
+            # Green (< 40%): Likely Human
             if s_score >= 65.0:
                 classification = "Likely AI"
                 color_class = "bg-red-500/20 border-red-500/50 text-red-200"
+                highlight_color = "red"
+                is_ai = True
             elif s_score >= 40.0:
                 classification = "Mixed"
                 color_class = "bg-yellow-500/20 border-yellow-500/50 text-yellow-200"
+                highlight_color = "yellow"
+                is_ai = True
             else:
                 classification = "Likely Human"
                 color_class = "bg-emerald-500/20 border-emerald-500/50 text-emerald-200"
+                highlight_color = "green"
+                is_ai = False
 
             analyzed_sentences.append({
                 "id": idx + 1,
@@ -201,68 +220,98 @@ class AIDetector:
                 "words": word_count,
                 "classification": classification,
                 "color_class": color_class,
+                "highlight_color": highlight_color,
+                "is_ai": is_ai,
                 "reasons": reasons if reasons else ["Natural sentence cadence"]
             })
 
-        # 6. Final Aggregate AI Probability Calculation
-        avg_sent_score = statistics.mean(sentence_scores) if sentence_scores else 20.0
+        # 6. ZeroGPT-Standard Detecting Ratio & Metric Calculation
+        # In ZeroGPT:
+        # textWords is total word count.
+        # aiWords is the sum of words in sentences flagged as AI (score >= 40%).
+        ai_words = sum(s["words"] for s in analyzed_sentences if s["is_ai"])
+        ai_sentences_count = sum(1 for s in analyzed_sentences if s["is_ai"])
+        avg_sent_score = statistics.mean(sentence_scores) if sentence_scores else 10.0
 
-        raw_ai_prob = (
-            (burstiness_ai_score * 0.25) +
-            (lexical_ai_score * 0.20) +
-            (cliche_ai_score * 0.30) +
-            (opener_ai_score * 0.10) +
-            (avg_sent_score * 0.15)
-        )
+        # Word ratio baseline
+        raw_word_ratio = (ai_words / total_words * 100.0) if total_words > 0 else 0.0
 
-        # Natural human writing bonus if 0 cliches and authentic human variance (CV >= 0.25)
-        if total_cliches_found == 0 and burstiness_val >= 0.25:
-            raw_ai_prob *= 0.75
+        if ai_words == 0:
+            # When zero sentences trigger AI thresholds
+            if total_cliches_found == 0:
+                fake_percentage = 0.0
+            else:
+                fake_percentage = min(12.0, round(cliche_density * 4.0, 1))
+        else:
+            # Calibrate word ratio with average AI sentence scores and cliche density
+            avg_ai_sent_score = statistics.mean([s["score"] for s in analyzed_sentences if s["is_ai"]])
+            severity_factor = avg_ai_sent_score / 100.0
+            calibrated = (raw_word_ratio * 0.70) + (raw_word_ratio * severity_factor * 0.30)
+            if total_cliches_found > 0:
+                calibrated = max(calibrated, raw_word_ratio)
+            fake_percentage = round(min(100.0, max(0.0, calibrated)), 1)
 
-
-        ai_percentage = int(max(2, min(99, round(raw_ai_prob))))
+        ai_percentage = int(max(0, min(100, round(fake_percentage))))
         human_percentage = 100 - ai_percentage
 
-        # Verdict Categorization
-        if ai_percentage >= 70:
-            verdict = "Highly Likely AI-Generated"
-            verdict_color = "text-red-400"
-            confidence = "High"
-            summary_expl = "High concentration of AI tropes, rigid sentence structures, and predictable cadence."
-        elif ai_percentage >= 50:
-            verdict = "Likely AI-Generated"
-            verdict_color = "text-orange-400"
-            confidence = "Medium"
-            summary_expl = "Features characteristic of AI generation detected, including robotic transitions and formulaic syntax."
-        elif ai_percentage >= 30:
-            verdict = "Mixed / Hybrid Content"
-            verdict_color = "text-yellow-400"
-            confidence = "Medium"
-            summary_expl = "Text shows blended signals—some natural human pacing alongside structured transitions."
-        elif ai_percentage >= 18:
-            verdict = "Likely Human-Written"
+        # ZeroGPT Standard Verdict Thresholds:
+        # 0% - 15%: "Your text is Human written"
+        # 15% - 35%: "Your text is Most likely Human written, may include parts generated by AI"
+        # 35% - 65%: "Your text contains mixed signals, with some parts generated by AI"
+        # 65% - 100%: "Your text is AI / GPT Generated"
+        if fake_percentage < 15.0:
+            verdict = "Your text is Human written"
+            feedback_message = "Your text is Human written"
             verdict_color = "text-emerald-400"
-            confidence = "Medium"
-            summary_expl = "Text exhibits strong burstiness, natural rhythm, and low artificial phrasing."
-        else:
-            verdict = "Highly Likely Human-Written"
-            verdict_color = "text-emerald-300"
+            is_human_written = True
+            is_gpt_generated = False
             confidence = "High"
-            summary_expl = "Authentic human rhythm with punchy variation, natural vocabulary, and zero AI clichés."
+            summary_expl = "Your text is Human written. Authentic human rhythm, natural variation, and zero AI clichés detected."
+        elif fake_percentage < 35.0:
+            verdict = "Your text is Most likely Human written, may include parts generated by AI"
+            feedback_message = "Your text is Most likely Human written, may include parts generated by AI"
+            verdict_color = "text-emerald-300"
+            is_human_written = True
+            is_gpt_generated = False
+            confidence = "Medium"
+            summary_expl = "Your text is Most likely Human written, may include parts generated by AI. Predominantly natural cadence."
+        elif fake_percentage < 65.0:
+            verdict = "Your text contains mixed signals, with some parts generated by AI"
+            feedback_message = "Your text contains mixed signals, with some parts generated by AI"
+            verdict_color = "text-yellow-400"
+            is_human_written = False
+            is_gpt_generated = False
+            confidence = "Medium"
+            summary_expl = "Your text contains mixed signals, with some parts generated by AI. Some sentences exhibit uniform cadence or AI transitions."
+        else:
+            verdict = "Your text is AI / GPT Generated"
+            feedback_message = "Your text is AI / GPT Generated"
+            verdict_color = "text-red-400"
+            is_human_written = False
+            is_gpt_generated = True
+            confidence = "High"
+            summary_expl = "Your text is AI / GPT Generated. High concentration of AI markers, formulaic syntax, and repetitive structure."
 
         readability = calculate_readability(text)
 
         return {
+            "fakePercentage": fake_percentage,
             "ai_percentage": ai_percentage,
             "human_percentage": human_percentage,
+            "is_human_written": is_human_written,
+            "is_gpt_generated": is_gpt_generated,
+            "feedback_message": feedback_message,
             "verdict": verdict,
             "verdict_color": verdict_color,
             "confidence": confidence,
             "explanation": summary_expl,
+            "textWords": total_words,
+            "aiWords": ai_words,
             "sentences": analyzed_sentences,
             "metrics": {
                 "word_count": total_words,
                 "sentence_count": total_sentences,
+                "ai_words": ai_words,
                 "burstiness_index": round(burstiness_val, 2),
                 "sentence_std_dev": round(stdev_len, 1),
                 "vocabulary_ttr": round(ttr * 100, 1),

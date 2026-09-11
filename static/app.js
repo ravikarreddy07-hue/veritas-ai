@@ -508,11 +508,16 @@ async function startDocumentProcessing() {
 }
 
 function renderDocumentResults(data) {
-    const origAi = data.original_analysis.ai_percentage;
-    const origHuman = Math.max(0, 100 - origAi);
-    const humAi = data.humanized_analysis.ai_percentage;
-    const humHuman = Math.max(0, 100 - humAi);
-    const delta = data.score_delta;
+    const origFake = (data.original_analysis.fakePercentage !== undefined) ? data.original_analysis.fakePercentage : data.original_analysis.ai_percentage;
+    const origHuman = Math.max(0, 100 - origFake);
+    const humFake = (data.humanized_analysis.fakePercentage !== undefined) ? data.humanized_analysis.fakePercentage : data.humanized_analysis.ai_percentage;
+    const humHuman = Math.max(0, 100 - humFake);
+    const delta = (data.score_delta_exact !== undefined) ? data.score_delta_exact : data.score_delta;
+    const correctingRatio = (data.correcting_ratio !== undefined) ? data.correcting_ratio : 100;
+    const origAiWords = (data.original_ai_words !== undefined) ? data.original_ai_words : (data.original_analysis.aiWords || 0);
+    const humAiWords = (data.humanized_ai_words !== undefined) ? data.humanized_ai_words : (data.humanized_analysis.aiWords || 0);
+    const origTotalWords = data.original_analysis.textWords || data.word_count || 0;
+    const humTotalWords = data.humanized_analysis.textWords || data.humanized_word_count || 0;
 
     // Original Card
     const origAiEl = document.getElementById('doc-orig-ai-score');
@@ -520,13 +525,19 @@ function renderDocumentResults(data) {
     const origRatioBar = document.getElementById('doc-orig-ratio-bar');
     const origVerdict = document.getElementById('doc-orig-verdict-badge');
     const origExpl = document.getElementById('doc-orig-expl');
+    const docOrigAiWords = document.getElementById('doc-orig-ai-words');
+    const docOrigTotalWords = document.getElementById('doc-orig-total-words');
 
-    if (origAiEl) origAiEl.textContent = `${origAi}%`;
-    if (origHumanEl) origHumanEl.textContent = `${origHuman}%`;
-    if (origRatioBar) origRatioBar.style.width = `${origAi}%`;
+    if (origAiEl) origAiEl.textContent = `${typeof origFake === 'number' ? origFake.toFixed(1) : origFake}%`;
+    if (origHumanEl) origHumanEl.textContent = `${typeof origHuman === 'number' ? origHuman.toFixed(1) : origHuman}%`;
+    if (origRatioBar) origRatioBar.style.width = `${Math.min(100, Math.max(0, origFake))}%`;
+    if (docOrigAiWords) docOrigAiWords.textContent = origAiWords;
+    if (docOrigTotalWords) docOrigTotalWords.textContent = origTotalWords;
+
     if (origVerdict) {
-        origVerdict.textContent = data.original_analysis.verdict || (origAi > 50 ? 'Likely AI' : 'Human-Like');
-        if (origAi > 50) {
+        const vBefore = data.verdict_before || data.original_analysis.feedback_message || data.original_analysis.verdict;
+        origVerdict.textContent = vBefore;
+        if (origFake >= 35) {
             origVerdict.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20';
         } else {
             origVerdict.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
@@ -542,12 +553,18 @@ function renderDocumentResults(data) {
     const humRatioBar = document.getElementById('doc-humanized-ratio-bar');
     const humVerdict = document.getElementById('doc-humanized-verdict-badge');
     const humExpl = document.getElementById('doc-humanized-expl');
+    const docHumAiWords = document.getElementById('doc-humanized-ai-words');
+    const docHumTotalWords = document.getElementById('doc-humanized-total-words');
 
-    if (humAiEl) humAiEl.textContent = `${humAi}%`;
-    if (humHumanEl) humHumanEl.textContent = `${humHuman}%`;
-    if (humRatioBar) humRatioBar.style.width = `${humHuman}%`;
+    if (humAiEl) humAiEl.textContent = `${typeof humFake === 'number' ? humFake.toFixed(1) : humFake}%`;
+    if (humHumanEl) humHumanEl.textContent = `${typeof humHuman === 'number' ? humHuman.toFixed(1) : humHuman}%`;
+    if (humRatioBar) humRatioBar.style.width = `${Math.min(100, Math.max(0, humHuman))}%`;
+    if (docHumAiWords) docHumAiWords.textContent = humAiWords;
+    if (docHumTotalWords) docHumTotalWords.textContent = humTotalWords;
+
     if (humVerdict) {
-        humVerdict.textContent = data.humanized_analysis.verdict || (humAi <= 15 ? 'Verified Human' : 'Human-Like');
+        const vAfter = data.verdict_after || data.humanized_analysis.feedback_message || data.humanized_analysis.verdict;
+        humVerdict.textContent = vAfter;
         humVerdict.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
     }
     if (humExpl && data.humanized_analysis.explanation) {
@@ -558,22 +575,12 @@ function renderDocumentResults(data) {
     const deltaText = document.getElementById('doc-delta-banner-text');
     const deltaBadge = document.getElementById('doc-delta-badge');
     if (deltaText) {
-        if (delta > 0) {
-            deltaText.textContent = `AI likelihood dropped by ${delta}% (from ${origAi}% to ${humAi}%) in a single closed-loop pass.`;
-        } else if (origAi <= 15) {
-            deltaText.textContent = `Document verified as authentic human prose (${origAi}% AI). Preserved in pristine human state without artificial alteration.`;
-        } else {
-            deltaText.textContent = `Document already at optimal human score (${origAi}% AI). Preserved cadence without artificial alteration.`;
-        }
+        const vAfter = data.verdict_after || data.humanized_analysis.feedback_message || data.humanized_analysis.verdict;
+        deltaText.textContent = `ZeroGPT Correcting Ratio: ${correctingRatio}% AI eliminated (${origAiWords} AI words reduced to ${humAiWords}). Result: ${vAfter}`;
     }
     if (deltaBadge) {
-        if (delta > 0) {
-            deltaBadge.textContent = `-${delta}% AI Drop`;
-            deltaBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-        } else {
-            deltaBadge.textContent = `Verified Human (${origAi}%)`;
-            deltaBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-        }
+        deltaBadge.textContent = `${correctingRatio}% Corrected`;
+        deltaBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono';
     }
 
     // Shield badge
@@ -1002,27 +1009,40 @@ function renderDetectionResults(data) {
     const container = document.getElementById('detector-results');
     container.classList.remove('hidden');
 
-    const score = data.ai_percentage;
+    const score = (data.fakePercentage !== undefined) ? data.fakePercentage : data.ai_percentage;
     const scoreCircle = document.getElementById('score-circle');
     const verdictTitle = document.getElementById('verdict-title');
     const verdictDesc = document.getElementById('verdict-desc');
 
     // Smooth counter animation
-    animateScoreGauge(score);
+    animateScoreGauge(Math.round(score));
 
     if (score >= 65) {
         scoreCircle.setAttribute('class', 'text-red-500 transition-all duration-700 ease-out');
         verdictTitle.className = 'text-xl font-bold text-red-400 mt-0.5';
-    } else if (score >= 40) {
+    } else if (score >= 35) {
         scoreCircle.setAttribute('class', 'text-yellow-500 transition-all duration-700 ease-out');
         verdictTitle.className = 'text-xl font-bold text-yellow-400 mt-0.5';
+    } else if (score >= 15) {
+        scoreCircle.setAttribute('class', 'text-emerald-300 transition-all duration-700 ease-out');
+        verdictTitle.className = 'text-xl font-bold text-emerald-300 mt-0.5';
     } else {
         scoreCircle.setAttribute('class', 'text-emerald-400 transition-all duration-700 ease-out');
         verdictTitle.className = 'text-xl font-bold text-emerald-400 mt-0.5';
     }
 
-    verdictTitle.textContent = data.verdict;
+    verdictTitle.textContent = data.feedback_message || data.verdict;
     verdictDesc.textContent = data.explanation;
+
+    // ZeroGPT Metric Badges: Text Words, AI Words, Detecting Ratio
+    const textWords = data.textWords || data.metrics?.word_count || 0;
+    const aiWords = (data.aiWords !== undefined) ? data.aiWords : (data.metrics?.ai_words || 0);
+    const metricTextWords = document.getElementById('metric-text-words');
+    const metricAiWords = document.getElementById('metric-ai-words');
+    const metricFakePct = document.getElementById('metric-fake-pct');
+    if (metricTextWords) metricTextWords.textContent = textWords;
+    if (metricAiWords) metricAiWords.textContent = aiWords;
+    if (metricFakePct) metricFakePct.textContent = `${typeof score === 'number' ? score.toFixed(1) : score}%`;
 
     // Forensic Metrics
     document.getElementById('metric-burstiness').textContent = data.metrics.burstiness_index;
@@ -1156,31 +1176,25 @@ function renderHumanizerResults(data) {
     const resultsContainer = document.getElementById('humanizer-results');
     resultsContainer.classList.remove('hidden');
 
-    const originalAi = data.original_analysis.ai_percentage;
-    const newAi = data.humanized_analysis.ai_percentage;
-    const delta = data.score_delta;
+    const origFake = (data.original_analysis.fakePercentage !== undefined) ? data.original_analysis.fakePercentage : data.original_analysis.ai_percentage;
+    const humFake = (data.humanized_analysis.fakePercentage !== undefined) ? data.humanized_analysis.fakePercentage : data.humanized_analysis.ai_percentage;
+    const delta = (data.score_delta_exact !== undefined) ? data.score_delta_exact : data.score_delta;
+    const correctingRatio = (data.correcting_ratio !== undefined) ? data.correcting_ratio : 100;
+    const origAiWords = (data.original_ai_words !== undefined) ? data.original_ai_words : (data.original_analysis.aiWords || 0);
+    const humAiWords = (data.humanized_ai_words !== undefined) ? data.humanized_ai_words : (data.humanized_analysis.aiWords || 0);
+    const aiWordsEliminated = (data.ai_words_eliminated !== undefined) ? data.ai_words_eliminated : Math.max(0, origAiWords - humAiWords);
 
     // Delta Banner
     const deltaBannerText = document.getElementById('delta-banner-text');
     if (deltaBannerText) {
-        if (delta > 0) {
-            deltaBannerText.textContent = `AI likelihood reduced from ${originalAi}% to ${newAi}% (${data.humanized_analysis.verdict})`;
-        } else if (originalAi <= 15) {
-            deltaBannerText.textContent = `Text verified as authentic human prose (${originalAi}% AI). Preserved in pristine human state without artificial alteration.`;
-        } else {
-            deltaBannerText.textContent = `Text already at optimal human score (${originalAi}% AI). Preserved cadence without artificial alteration.`;
-        }
+        const vAfter = data.verdict_after || data.humanized_analysis.feedback_message || data.humanized_analysis.verdict;
+        deltaBannerText.textContent = `Correcting Ratio: ${correctingRatio}% AI eliminated (${origAiWords} AI words reduced to ${humAiWords}). Result: ${vAfter}`;
     }
     
     const deltaBadge = document.getElementById('delta-badge');
     if (deltaBadge) {
-        if (delta > 0) {
-            deltaBadge.textContent = `-${delta}% Drop`;
-            deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
-        } else {
-            deltaBadge.textContent = `Verified Human (${originalAi}%)`;
-            deltaBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-        }
+        deltaBadge.textContent = `${correctingRatio}% Corrected`;
+        deltaBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-mono';
     }
 
     // Academic Shield Pill
@@ -1207,29 +1221,31 @@ function renderHumanizerResults(data) {
     const textHumHumanSub = document.getElementById('text-hum-human-sub');
 
     if (textOrigScore && textHumScore) {
-        textOrigScore.textContent = `${originalAi}%`;
-        if (textOrigAiSub) textOrigAiSub.textContent = `${originalAi}%`;
-        if (textOrigHumanSub) textOrigHumanSub.textContent = `${Math.max(0, 100 - originalAi)}%`;
+        textOrigScore.textContent = `${typeof origFake === 'number' ? origFake.toFixed(1) : origFake}%`;
+        if (textOrigAiSub) textOrigAiSub.textContent = `${origAiWords} AI words`;
+        if (textOrigHumanSub) textOrigHumanSub.textContent = `${data.original_analysis.textWords || data.original_analysis.metrics?.word_count || 0} total words`;
         if (textOrigVerdict) {
-            textOrigVerdict.textContent = data.original_analysis.verdict || (originalAi > 50 ? 'Likely AI' : 'Human-Like');
-            if (originalAi > 50) {
-                textOrigVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-rose-400 bg-rose-500/10';
+            const vBefore = data.verdict_before || data.original_analysis.feedback_message || data.original_analysis.verdict;
+            textOrigVerdict.textContent = vBefore;
+            if (origFake >= 35) {
+                textOrigVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-rose-400 bg-rose-500/10 truncate';
             } else {
-                textOrigVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-amber-400 bg-amber-500/10';
+                textOrigVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-emerald-300 bg-emerald-500/20 truncate';
             }
         }
 
-        textHumScore.textContent = `${newAi}%`;
-        if (textHumAiSub) textHumAiSub.textContent = `${newAi}%`;
-        if (textHumHumanSub) textHumHumanSub.textContent = `${Math.max(0, 100 - newAi)}%`;
+        textHumScore.textContent = `${typeof humFake === 'number' ? humFake.toFixed(1) : humFake}%`;
+        if (textHumAiSub) textHumAiSub.textContent = `${humAiWords} AI words`;
+        if (textHumHumanSub) textHumHumanSub.textContent = `${data.humanized_analysis.textWords || data.humanized_analysis.metrics?.word_count || 0} total words`;
         if (textHumVerdict) {
-            textHumVerdict.textContent = data.humanized_analysis.verdict || (newAi <= 15 ? 'Verified Human' : 'Human-Like');
-            textHumVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-emerald-300 bg-emerald-500/20';
+            const vAfter = data.verdict_after || data.humanized_analysis.feedback_message || data.humanized_analysis.verdict;
+            textHumVerdict.textContent = vAfter;
+            textHumVerdict.className = 'text-[10px] px-1.5 py-0.5 rounded font-semibold text-emerald-300 bg-emerald-500/20 truncate';
         }
     }
 
     // Render Multi-Detector Bypass Simulator
-    renderBypassSimulator(newAi);
+    renderBypassSimulator(Math.round(humFake));
 
     // Raw Output Textarea
     const outputEl = document.getElementById('output-text');

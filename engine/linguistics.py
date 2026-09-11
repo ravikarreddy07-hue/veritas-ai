@@ -8,7 +8,7 @@ from typing import List, Dict, Tuple, Set
 
 # Comprehensive AI cliché phrases, transitional buzzwords, and repetitive syntactical markers
 AI_CLICHE_PATTERNS: Dict[str, Dict[str, str]] = {
-    r"\bin today's (?:fast-paced|digital|interconnected|modern) (?:world|age|landscape|society|era)\b": {
+    r"\bin today's (?:(?:fast-paced|digital|interconnected|modern|rapidly changing)\s*)+ (?:world|age|landscape|society|era)\b": {
         "natural": "these days",
         "academic": "in contemporary society",
         "professional": "today",

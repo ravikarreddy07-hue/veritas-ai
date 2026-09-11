@@ -176,13 +176,37 @@ async def humanize_text(req: HumanizeRequest):
         "text": h_result["humanized_text"]
     })
 
-    score_delta = max(0, original_analysis["ai_percentage"] - humanized_analysis["ai_percentage"])
+    orig_fake = original_analysis.get("fakePercentage", float(original_analysis["ai_percentage"]))
+    hum_fake = humanized_analysis.get("fakePercentage", float(humanized_analysis["ai_percentage"]))
+    score_delta = max(0.0, round(orig_fake - hum_fake, 1))
+
+    orig_ai_words = original_analysis.get("aiWords", 0)
+    hum_ai_words = humanized_analysis.get("aiWords", 0)
+    ai_words_eliminated = max(0, orig_ai_words - hum_ai_words)
+
+    if orig_ai_words > 0:
+        correcting_ratio = round((ai_words_eliminated / orig_ai_words) * 100.0, 1)
+    elif orig_fake > 0:
+        correcting_ratio = round((score_delta / orig_fake) * 100.0, 1)
+    else:
+        correcting_ratio = 100.0
+
+    verdict_before = original_analysis.get("feedback_message", original_analysis["verdict"])
+    verdict_after = humanized_analysis.get("feedback_message", humanized_analysis["verdict"])
 
     return JSONResponse(content={
         "original_analysis": original_analysis,
         "humanization": h_result,
         "humanized_analysis": humanized_analysis,
-        "score_delta": score_delta,
+        "score_delta": int(round(score_delta)),
+        "score_delta_exact": score_delta,
+        "correcting_ratio": correcting_ratio,
+        "relative_correction_rate": correcting_ratio,
+        "original_ai_words": orig_ai_words,
+        "humanized_ai_words": hum_ai_words,
+        "ai_words_eliminated": ai_words_eliminated,
+        "verdict_before": verdict_before,
+        "verdict_after": verdict_after,
         "doc_id": doc_id,
         "download_urls": {
             "pdf": f"/api/document/download/{doc_id}?format=pdf",
@@ -357,7 +381,23 @@ async def process_document_endpoint(
         "paragraphs": paragraphs
     })
 
-    score_delta = max(0, original_analysis["ai_percentage"] - humanized_analysis["ai_percentage"])
+    orig_fake = original_analysis.get("fakePercentage", float(original_analysis["ai_percentage"]))
+    hum_fake = humanized_analysis.get("fakePercentage", float(humanized_analysis["ai_percentage"]))
+    score_delta = max(0.0, round(orig_fake - hum_fake, 1))
+
+    orig_ai_words = original_analysis.get("aiWords", 0)
+    hum_ai_words = humanized_analysis.get("aiWords", 0)
+    ai_words_eliminated = max(0, orig_ai_words - hum_ai_words)
+
+    if orig_ai_words > 0:
+        correcting_ratio = round((ai_words_eliminated / orig_ai_words) * 100.0, 1)
+    elif orig_fake > 0:
+        correcting_ratio = round((score_delta / orig_fake) * 100.0, 1)
+    else:
+        correcting_ratio = 100.0
+
+    verdict_before = original_analysis.get("feedback_message", original_analysis["verdict"])
+    verdict_after = humanized_analysis.get("feedback_message", humanized_analysis["verdict"])
     default_fmt = "pptx" if orig_fmt == "pptx" else ("docx" if orig_fmt == "docx" else ("pdf" if orig_fmt == "pdf" else "txt"))
 
     download_urls = {
@@ -386,7 +426,15 @@ async def process_document_endpoint(
         "humanized_text": humanized_text,
         "original_analysis": original_analysis,
         "humanized_analysis": humanized_analysis,
-        "score_delta": score_delta,
+        "score_delta": int(round(score_delta)),
+        "score_delta_exact": score_delta,
+        "correcting_ratio": correcting_ratio,
+        "relative_correction_rate": correcting_ratio,
+        "original_ai_words": orig_ai_words,
+        "humanized_ai_words": hum_ai_words,
+        "ai_words_eliminated": ai_words_eliminated,
+        "verdict_before": verdict_before,
+        "verdict_after": verdict_after,
         "changes_applied": h_result.get("changes_applied", []),
         "shielded_items_count": h_result.get("shielded_items_count", 0),
         "humanization": {
