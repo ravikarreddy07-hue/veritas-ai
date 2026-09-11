@@ -941,7 +941,8 @@ def humanize_docx_in_place(
         if not t:
             continue
 
-        if "drawing" in p._p.xml or "pict" in p._p.xml:
+        has_drawing = bool(p._p.xpath('.//w:drawing') or p._p.xpath('.//w:pict'))
+        if has_drawing:
             all_humanized_paragraphs.append(t)
             continue
 
