@@ -5,6 +5,7 @@ with batched sliding-window context inference, burstiness variance blending,
 minor cliché penalty nudging, and ZeroGPT-standard metric formatting.
 """
 
+import os
 import re
 import math
 import asyncio
@@ -78,7 +79,7 @@ class AIDetector:
         self,
         model_name: str = "desklib/ai-text-detector-v1.01",
         device: Optional[str] = None,
-        lazy_load: bool = False
+        lazy_load: bool = True
     ):
         self.model_name = model_name
         self.preferred_device = device
@@ -112,8 +113,40 @@ class AIDetector:
             self.has_model = False
             return False
 
-        # Guard against OOM on low-memory cloud instances (e.g. Render 512MB free tier)
+        # Guard against OOM on low-memory cloud instances & Linux cgroups (e.g. Render 512MB free tier)
         try:
+            # Check Render environment or explicit disable flag
+            if os.environ.get("RENDER") == "true" and os.environ.get("RENDER_PLAN", "free") == "free":
+                logger.warning("Render Free Tier detected (512MB RAM). Bypassing 1.7GB neural model to prevent OOM crash.")
+                self.has_model = False
+                return False
+
+            if os.environ.get("DISABLE_NEURAL_MODEL", "").lower() in ("1", "true", "yes"):
+                self.has_model = False
+                return False
+
+            # Check Linux cgroup memory limit (container limit)
+            cgroup_mem = None
+            if os.path.exists("/sys/fs/cgroup/memory.max"):
+                with open("/sys/fs/cgroup/memory.max", "r") as f:
+                    val = f.read().strip()
+                    if val != "max":
+                        cgroup_mem = int(val)
+            elif os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+                with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                    val = int(f.read().strip())
+                    if val < (1 << 50):
+                        cgroup_mem = val
+
+            if cgroup_mem is not None and cgroup_mem < 1.8 * (1024 ** 3):
+                logger.warning(
+                    f"Container cgroup memory limit ({cgroup_mem / (1024**2):.0f} MB) is below requirement for 1.7GB DeBERTa model. "
+                    "Operating in calibrated fallback mode to prevent container crash."
+                )
+                self.has_model = False
+                return False
+
+            # Check host virtual memory
             import psutil
             mem = psutil.virtual_memory()
             if mem.total < 1.8 * (1024 ** 3):
@@ -123,8 +156,8 @@ class AIDetector:
                 )
                 self.has_model = False
                 return False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Memory check exception: {e}")
 
         try:
             if self.preferred_device:
