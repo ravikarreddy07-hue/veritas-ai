@@ -576,7 +576,7 @@ function renderDocumentResults(data) {
     const deltaBadge = document.getElementById('doc-delta-badge');
     if (deltaText) {
         const vAfter = data.verdict_after || data.humanized_analysis.feedback_message || data.humanized_analysis.verdict;
-        deltaText.textContent = `ZeroGPT Correcting Ratio: ${correctingRatio}% AI eliminated (${origAiWords} AI words reduced to ${humAiWords}). Result: ${vAfter}`;
+        deltaText.textContent = `Veritas Correcting Ratio: ${correctingRatio}% AI eliminated (${origAiWords} AI words reduced to ${humAiWords}). Result: ${vAfter}`;
     }
     if (deltaBadge) {
         deltaBadge.textContent = `${correctingRatio}% Corrected`;
@@ -1034,7 +1034,7 @@ function renderDetectionResults(data) {
     verdictTitle.textContent = data.feedback_message || data.verdict;
     verdictDesc.textContent = data.explanation;
 
-    // ZeroGPT Metric Badges: Text Words, AI Words, Detecting Ratio
+    // Veritas Metric Badges: Text Words, AI Words, Detecting Ratio
     const textWords = data.textWords || data.metrics?.word_count || 0;
     const aiWords = (data.aiWords !== undefined) ? data.aiWords : (data.metrics?.ai_words || 0);
     const metricTextWords = document.getElementById('metric-text-words');
