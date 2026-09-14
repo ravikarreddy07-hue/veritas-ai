@@ -251,15 +251,15 @@ class AIDetector:
         The uncalibrated linear head in DeBERTa-v3-large exhibits a base prior around ~0.50
         for short sentences; this calibrated mapping provides a sharp separation:
           - p <= 0.50: clearly human cadence, mapped to [0.00, 0.05]
-          - 0.50 < p <= 0.82: transitional/moderate region, mapped to [0.05, 0.40]
-          - p > 0.82: strong AI certainty, mapped to [0.40, 1.00]
+          - 0.50 < p <= 0.75: transitional/moderate region, mapped to [0.05, 0.40]
+          - p > 0.75: strong AI certainty, mapped to [0.40, 1.00]
         """
         if p <= 0.50:
             return 0.05 * (p / 0.50)
-        elif p <= 0.82:
-            return 0.05 + 0.35 * (((p - 0.50) / 0.32) ** 1.5)
+        elif p <= 0.75:
+            return 0.05 + 0.35 * (((p - 0.50) / 0.25) ** 1.5)
         else:
-            return 0.40 + 0.60 * (((p - 0.82) / 0.18) ** 0.8)
+            return 0.40 + 0.60 * (((p - 0.75) / 0.25) ** 0.8)
 
     def _calculate_statistical_probabilities(
         self,
@@ -275,15 +275,15 @@ class AIDetector:
         for sent in sentences:
             words = tokenize_words(sent)
             w_count = len(words)
-            # Baseline human conversational prior
-            p = 0.12
+            # Baseline human conversational prior — raised to improve AI signal separation
+            p = 0.18
 
             # 1. AI Cliché and Buzzword Pattern Density
             cliches_in_sent = 0
             for regex, info in self.cliche_compiled:
                 if regex.search(sent):
                     cliches_in_sent += 1
-                    p += 0.30
+                    p += 0.38  # Raised from 0.30 — single strong cliché should reliably flag AI
 
             # 2. AI-Favored Formulaic Openers
             s_lower = sent.lower().strip()
@@ -305,10 +305,10 @@ class AIDetector:
             # 5. Natural Human Conversational Signals
             if w_count <= 8:
                 p -= 0.20
-            if any(c in sent for c in ["'", "’"]):
+            if any(c in sent for c in ["'", "'"]):
                 p -= 0.08
             if re.search(r'\b(i|me|my|we|us|our|you|your)\b', sent, re.IGNORECASE):
-                p -= 0.18
+                p -= 0.10  # Reduced from -0.18 — AI essays often use first-person voice
 
             probabilities.append(max(0.01, min(0.99, p)))
         return probabilities
@@ -468,18 +468,18 @@ class AIDetector:
             final_s_score = max(0.0, min(100.0, base_score + cliche_nudge - cadence_bonus))
             sentence_scores.append(final_s_score)
 
-            # ZeroGPT Sentence Classification Thresholds:
-            # Red (>= 65%): AI / GPT Generated
-            # Yellow (50% - 64%): Mixed / partial AI
-            # Green (< 50%): Likely Human
-            if final_s_score >= 65.0:
+            # Sentence Classification Thresholds (tightened for better AI detection):
+            # Red (>= 55%): AI / GPT Generated  — lowered from 65% to catch more AI sentences
+            # Yellow (42% - 54%): Mixed / partial AI  — updated band
+            # Green (< 42%): Likely Human
+            if final_s_score >= 55.0:
                 classification = "Likely AI"
                 color_class = "bg-red-500/20 border-red-500/50 text-red-200"
                 highlight_color = "red"
                 is_ai = True
                 if not reasons:
                     reasons.append(f"High AI pattern ({round(model_score)}%)")
-            elif final_s_score >= 50.0:
+            elif final_s_score >= 42.0:
                 classification = "Mixed"
                 color_class = "bg-yellow-500/20 border-yellow-500/50 text-yellow-200"
                 highlight_color = "yellow"
@@ -520,9 +520,9 @@ class AIDetector:
             # Authentic human baseline: slight non-zero variance (2.0% - 14.0%) reflecting natural language
             fake_percentage = round(min(14.0, max(2.0, avg_sent_score)), 1)
         elif ai_words == 0 and mixed_words > 0:
-            # Mixed region: partial AI detection (15.0% - 35.0%)
-            mixed_ratio = (mixed_words / total_words) * 25.0
-            fake_percentage = round(min(35.0, max(15.0, mixed_ratio)), 1)
+            # Mixed region: raised multiplier and cap to better reflect AI-heavy mixed text (35%–50%)
+            mixed_ratio = (mixed_words / total_words) * 40.0
+            fake_percentage = round(min(50.0, max(15.0, mixed_ratio)), 1)
         else:
             raw_word_ratio = (ai_words / total_words * 100.0)
             fake_percentage = round(min(100.0, max(raw_word_ratio, avg_sent_score)), 1)
