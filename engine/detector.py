@@ -119,6 +119,10 @@ class AIDetector:
 
         # Guard against OOM on low-memory cloud instances & Linux cgroups (e.g. Render 512MB free tier)
         try:
+            # Check Hugging Face Spaces environment
+            if os.environ.get("SPACE_ID"):
+                logger.info(f"Hugging Face Space detected ({os.environ.get('SPACE_ID')}). 16GB RAM available - initializing DeBERTa neural model.")
+
             # Check Render environment or explicit disable flag
             if os.environ.get("RENDER") == "true" and os.environ.get("RENDER_PLAN", "free") == "free":
                 logger.warning("Render Free Tier detected (512MB RAM). Bypassing 1.7GB neural model to prevent OOM crash.")

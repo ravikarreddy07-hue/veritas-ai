@@ -1,6 +1,17 @@
-# Veritas AI: Paragraph Detector & Humanizer (Localhost)
+---
+title: Veritas AI - AI Content Detector & Humanizer
+emoji: 🛡️
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
 
-A local web application that runs 100% privately on your machine to analyze paragraphs for AI patterns and transform them into natural, human-written text.
+# Veritas AI: Paragraph Detector & Humanizer
+
+A high-performance web application that analyzes paragraphs and documents for AI patterns and transforms them into natural, human-written text.
 
 ---
 
