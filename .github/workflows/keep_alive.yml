@@ -1,9 +1,9 @@
-﻿name: Keep Veritas AI Alive
+﻿name: Keep Veritas AI Alive (Every 7 min)
 
 on:
   schedule:
-    # Ping every 10 minutes to prevent Render free instance from sleeping
-    - cron: '*/10 * * * *'
+    # Ping every 7 minutes to keep Render instance active 24/7 without sleeping
+    - cron: '*/7 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,4 +12,6 @@ jobs:
     steps:
       - name: Ping Veritas AI
         run: |
+          echo "Pinging Veritas AI at $(date)..."
           curl -f -sS -I https://veritas-ai-lk96.onrender.com/api/health || true
+          echo "Keep-alive ping successful!"

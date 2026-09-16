@@ -7,7 +7,7 @@ Interval: 5 minutes (prevents Render free tier spin-down)
 import sys
 import requests
 
-MONITOR_URL = "https://veritas-ai-3e4e.onrender.com/api/health"
+MONITOR_URL = "https://veritas-ai-lk96.onrender.com/api/health"
 FRIENDLY_NAME = "Veritas AI (Render)"
 
 def setup_monitor(api_key: str):
@@ -22,7 +22,7 @@ def setup_monitor(api_key: str):
         "type": "1",  # HTTP(s)
         "url": MONITOR_URL,
         "friendly_name": FRIENDLY_NAME,
-        "interval": "300"  # 5 minutes (in seconds)
+        "interval": "420"  # 7 minutes (in seconds)
     }
     headers = {
         "content-type": "application/x-www-form-urlencoded",
