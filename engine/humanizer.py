@@ -869,16 +869,14 @@ class AIHumanizer:
                 split_sents = []
                 for s in sents:
                     words = tokenize_words(s)
-                    if len(words) > 15:
+                    if len(words) > 18:
                         clause_patterns = [
-                            (r',\s+which\s+', '. This '),
-                            (r',\s+while\s+', '. Meanwhile, '),
-                            (r',\s+whereas\s+', '. In contrast, '),
+                            (r',\s+which\s+(?=(?:means|allows|provides|enables|helps|ensures|creates|leads)\b)', '. This '),
+                            (r',\s+while\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Meanwhile, '),
+                            (r',\s+whereas\s+(?=(?:it|they|this|these|we|he|she)\b)', '. In contrast, '),
                             (r';\s+', '. '),
                             (r',\s+thereby\s+', '. This effectively '),
-                            (r',\s+enabling\s+', '. This allows '),
-                            (r',\s+facilitating\s+', '. This supports '),
-                            (r',\s+and\s+therefore\s+', '. Therefore, ')
+                            (r',\s+and\s+therefore\s+(?=(?:it|they|this|these|we)\b)', '. Therefore, ')
                         ]
                         for cp_pat, cp_rep in clause_patterns:
                             if re.search(cp_pat, s, re.IGNORECASE):
@@ -894,34 +892,21 @@ class AIHumanizer:
                 p3_changes = []
                 sents = split_sentences(modified)
 
-                # Split long sentences at conjunctions if score remains elevated
+                # Split long sentences at conjunctions only with subject pronouns
                 split_sents = []
                 for s in sents:
                     words = tokenize_words(s)
-                    if len(words) >= 15:
-                        for conj_pat, conj_rep in [(r',\s+and\s+', '. Also, '), (r',\s+but\s+', '. Still, ')]:
+                    if len(words) >= 18:
+                        for conj_pat, conj_rep in [
+                            (r',\s+and\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Also, '),
+                            (r',\s+but\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Still, ')
+                        ]:
                             if re.search(conj_pat, s, re.IGNORECASE):
                                 s = re.sub(conj_pat, conj_rep, s, count=1)
                                 p3_changes.append("Split uniform sentence for enhanced burstiness")
                                 break
                     split_sents.append(s)
                 sents = split_sents
-
-                if len(sents) >= 4:
-                    penult = sents[-2].strip()
-                    if not any(penult.lower().startswith(x) for x in ["in practice,", "at its core,", "clearly,", "notice that", "simple as that", "also,", "plus,", "notably,"]):
-                        anchor = "In practice, " if tone != "academic" else "Notably, "
-                        sents[-2] = f"{anchor}{penult[0].lower() + penult[1:] if len(penult) > 1 else penult}"
-                        p3_changes.append("Added natural contextual anchor")
-
-                # Ensure at least one cadence punchline exists for body paragraphs
-                if not is_bullet_or_heading:
-                    has_punch = any(p in " ".join(sents).lower() for p in ALL_PUNCHLINE_ROOTS)
-                    if not has_punch:
-                        pool = CADENCE_PUNCH_LINES.get(tone, CADENCE_PUNCH_LINES["natural"])
-                        if pool:
-                            sents.append(pool[0])
-                            p3_changes.append(f"Injected cadence punch: '{pool[0]}'")
 
                 modified = " ".join(sents)
                 modified = re.sub(r'\s+', ' ', modified).strip()
@@ -1009,10 +994,11 @@ class AIHumanizer:
 
         # Step 2: Fix robotic transitions & formulaic openers
         transitions = TRANSITION_REPLACEMENTS.get(tone, TRANSITION_REPLACEMENTS["natural"])
-        for ai_term, repl_list in transitions:
+        for t_idx, (ai_term, repl_list) in enumerate(transitions):
             pattern = re.compile(re.escape(ai_term), re.IGNORECASE)
             if pattern.search(modified):
-                replacement = random.choice(repl_list)
+                # Deterministic selection based on index to ensure consistent output
+                replacement = repl_list[t_idx % len(repl_list)] if repl_list else ""
                 if replacement == "":
                     modified = pattern.sub("", modified).strip()
                     modified = re.sub(r'(?<=[.!?]\s),', '', modified)
@@ -1028,53 +1014,34 @@ class AIHumanizer:
                     modified = pattern.sub(contracted, modified)
                     changes_applied.append(f"Injected natural contraction '{contracted}'")
 
-        # Step 4: Burstiness & Cadence Restructuring
+        # Step 4: Burstiness & Cadence Restructuring (Grammar-Safe, never breaks lists or injects fake punchlines)
         raw_sentences = split_sentences(modified)
         restructured_sentences = []
 
-        punch_pool = CADENCE_PUNCH_LINES.get(tone, CADENCE_PUNCH_LINES["natural"]).copy()
-        random.shuffle(punch_pool)
-        has_existing_punch = any(p in modified.lower() for p in ALL_PUNCHLINE_ROOTS)
-        is_bullet_or_heading = bool(re.match(r'^\s*(?:[\u2022\u2023\u25E6\u2043\u2219\*\-\—▪▫]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)])\s+', text)) or len(text.split()) <= 6
-
-        # In both balanced and aggressive modes, inject burstiness variance
         for idx, sent in enumerate(raw_sentences):
             words = tokenize_words(sent)
             word_count = len(words)
 
-            # Split long monotonous compound sentences (15+ words) into natural conversational beats
-            if word_count >= 15:
+            # Split overly long compound sentences (18+ words) ONLY at genuine independent clauses with subject pronouns
+            if word_count >= 18:
                 split_points = [
-                    (r',\s+and\s+', '. In fact, '),
-                    (r',\s+but\s+', '. Yet, '),
-                    (r',\s+while\s+', '. Meanwhile, '),
+                    (r',\s+and\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Also, '),
+                    (r',\s+but\s+(?=(?:it|they|this|these|we|he|she)\b)', '. However, '),
+                    (r',\s+while\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Meanwhile, '),
                     (r';\s+', '. '),
-                    (r',\s+which\s+', '. This '),
-                    (r',\s+so\s+', '. So ')
+                    (r',\s+which\s+(?=(?:means|allows|provides|enables|helps|ensures|creates|leads)\b)', '. This '),
+                    (r',\s+so\s+(?=(?:it|they|this|these|we|he|she)\b)', '. As a result, ')
                 ]
                 for sp_pattern, sp_replace in split_points:
                     if re.search(sp_pattern, sent, re.IGNORECASE):
                         sent = re.sub(sp_pattern, sp_replace, sent, count=1)
-                        changes_applied.append("Broken uniform clauses into dynamic human cadence")
+                        changes_applied.append("Refined clause structure for natural human cadence")
                         break
 
             if sent and sent[0].islower():
                 sent = sent[0].upper() + sent[1:]
 
             restructured_sentences.append(sent)
-
-            # Inject a short punchline for burstiness on body paragraphs
-            if not is_bullet_or_heading:
-                punch_count = sum(1 for p in ALL_PUNCHLINE_ROOTS if p in " ".join(restructured_sentences).lower())
-                max_punches = 2 if (intensity == "aggressive" and len(raw_sentences) >= 5) else (1 if not has_existing_punch else 0)
-                if punch_count < max_punches:
-                    if (intensity == "aggressive" and idx == 0 and len(raw_sentences) >= 2) or \
-                       (intensity == "aggressive" and idx == len(raw_sentences) - 2 and len(raw_sentences) >= 5) or \
-                       (idx == len(raw_sentences) - 1 and len(raw_sentences) >= 2):
-                        if punch_pool:
-                            punch = punch_pool.pop()
-                            restructured_sentences.append(punch)
-                            changes_applied.append(f"Injected high-burstiness punch: '{punch}'")
 
 
 

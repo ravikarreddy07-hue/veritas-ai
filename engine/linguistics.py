@@ -218,6 +218,111 @@ AI_CLICHE_PATTERNS: Dict[str, Dict[str, str]] = {
         "professional": "improves cross-team productivity",
         "creative": "brings everyone together",
         "desc": "AI trope: 'foster synergy'"
+    },
+    r"\bwatershed moment\b": {
+        "natural": "turning point",
+        "academic": "decisive historical juncture",
+        "professional": "pivotal transition",
+        "creative": "breakthrough chapter",
+        "desc": "AI trope: 'watershed moment'"
+    },
+    r"\bwith the assistance of\b": {
+        "natural": "using",
+        "academic": "mediated by",
+        "professional": "supported by",
+        "creative": "helped along by",
+        "desc": "AI filler: 'with the assistance of'"
+    },
+    r"\bthis ensures that\b": {
+        "natural": "this means",
+        "academic": "this establishes that",
+        "professional": "this confirms that",
+        "creative": "so now",
+        "desc": "AI transition: 'this ensures that'"
+    },
+    r"\bwhich provides\b": {
+        "natural": "giving",
+        "academic": "supplying",
+        "professional": "offering",
+        "creative": "handing over",
+        "desc": "AI clause: 'which provides'"
+    },
+    r"\bcontributed to the\b": {
+        "natural": "helped cause the",
+        "academic": "precipitated the",
+        "professional": "drove the",
+        "creative": "fed into the",
+        "desc": "AI phrase: 'contributed to the'"
+    },
+    r"\bin order to ensure\b": {
+        "natural": "to make sure",
+        "academic": "to guarantee",
+        "professional": "to ensure",
+        "creative": "so that",
+        "desc": "AI filler: 'in order to ensure'"
+    },
+    r"\ba wide range of\b": {
+        "natural": "many",
+        "academic": "numerous",
+        "professional": "various",
+        "creative": "all sorts of",
+        "desc": "AI filler: 'a wide range of'"
+    },
+    r"\ba broad spectrum of\b": {
+        "natural": "many kinds of",
+        "academic": "a diverse array of",
+        "professional": "various",
+        "creative": "a huge spread of",
+        "desc": "AI filler: 'a broad spectrum of'"
+    },
+    r"\bplays? an indispensable role\b": {
+        "natural": "is really essential",
+        "academic": "is indispensable",
+        "professional": "is vital",
+        "creative": "is the beating heart of",
+        "desc": "AI cliché: 'plays an indispensable role'"
+    },
+    r"\bat the forefront of\b": {
+        "natural": "leading",
+        "academic": "spearheading",
+        "professional": "leading",
+        "creative": "out in front of",
+        "desc": "AI cliché: 'at the forefront of'"
+    },
+    r"\bcornerstone of\b": {
+        "natural": "foundation of",
+        "academic": "primary pillar of",
+        "professional": "foundation for",
+        "creative": "bedrock of",
+        "desc": "AI cliché: 'cornerstone of'"
+    },
+    r"\bpaves? the way for\b": {
+        "natural": "opens the door to",
+        "academic": "prepares conditions for",
+        "professional": "enables",
+        "creative": "clears the path for",
+        "desc": "AI cliché: 'paves the way for'"
+    },
+    r"\bsheds? light on\b": {
+        "natural": "helps explain",
+        "academic": "clarifies",
+        "professional": "illustrates",
+        "creative": "reveals",
+        "desc": "AI cliché: 'sheds light on'"
+    },
+    r"\bfirst and foremost,\b": {
+        "natural": "first off,",
+        "academic": "primarily,",
+        "professional": "first,",
+        "creative": "to start with,",
+        "desc": "AI cliché: 'first and foremost'"
+    },
+    r"\bit goes without saying that\b": {
+        "natural": "of course,",
+        "academic": "naturally,",
+        "professional": "obviously,",
+        "creative": "clearly,",
+        "desc": "AI cliché: 'it goes without saying that'"
     }
 }
 
@@ -271,12 +376,57 @@ STOPWORDS: Set[str] = {
     "yours", "yourself", "yourselves"
 }
 
-# Overused LLM transitional openers
+# Overused LLM transitional openers and discourse patterns
 AI_FAVORED_OPENERS = [
     "furthermore,", "moreover,", "additionally,", "in addition,", "consequently,",
     "subsequently,", "importantly,", "crucially,", "ultimately,", "overall,",
-    "in essence,", "in summary,", "in conclusion,", "on the other hand,"
+    "in essence,", "in summary,", "in conclusion,", "on the other hand,",
+    "this ensures that", "these include", "by doing so,", "in doing so,",
+    "it is worth noting", "it is important to note", "first and foremost,"
 ]
+
+# Common past participles in passive constructions
+COMMON_PASSIVE_PARTICIPLES = {
+    "stored", "transformed", "converted", "established", "overthrown", "created", "designed",
+    "developed", "built", "written", "seen", "known", "given", "made", "found", "used",
+    "provided", "shown", "required", "achieved", "implemented", "generated", "produced",
+    "considered", "associated", "identified", "maintained", "utilized", "facilitated",
+    "conducted", "performed", "observed", "evaluated", "introduced", "distributed",
+    "defined", "characterized", "governed", "sustained", "adopted", "integrated",
+    "driven", "executed", "shaped", "packaged", "derived", "allocated", "secured"
+}
+
+def has_passive_voice(text: str) -> bool:
+    """Accurately checks for genuine passive voice (be + past participle), avoiding false positives."""
+    pattern = re.compile(r'\b(?:is|are|was|were|be|been|being)\s+(?:[a-zA-Z]+ly\s+)?([a-zA-Z]+)\b', re.IGNORECASE)
+    for match in pattern.finditer(text):
+        word = match.group(1).lower()
+        if word in {"not", "so", "very", "also", "just", "now", "here", "there", "still", "always", "never", "only", "about", "nine", "one", "two", "three", "four", "five", "six", "seven", "eight", "ten", "fine", "out", "able", "ready", "born", "great", "smart", "good", "bad", "happy", "sure", "likely"}:
+            continue
+        if word in COMMON_PASSIVE_PARTICIPLES:
+            return True
+        if (word.endswith("ed") or word.endswith("en")) and len(word) >= 5:
+            return True
+    return False
+
+def count_nominalizations(text: str) -> int:
+    """Counts abstract Latinate nominalizations, excluding common short/informal words."""
+    words = re.findall(r'\b[a-zA-Z]{6,}\b', text.lower())
+    count = 0
+    excluded = {"community", "security", "activity", "majority", "priority", "capacity", "identity", "reality", "moment", "element", "comment", "payment", "statement", "judgment"}
+    for w in words:
+        if w in excluded:
+            continue
+        if any(w.endswith(sfx) for sfx in ("tion", "tions", "ment", "ments", "ance", "ances", "ence", "ences", "ity", "ities")):
+            count += 1
+    return count
+
+# Human conversational cues
+FIRST_PERSON_REGEX = re.compile(r'\b(?:i|me|my|mine|myself|we|us|our|ours|ourselves|you|your|yours)\b', re.IGNORECASE)
+CONVERSATIONAL_REGEX = re.compile(
+    r'\b(?:hey|honestly|actually|anyway|pretty much|kind of|sort of|just|well,|gonna|wanna|yep|nope|thanks|cool|ok|okay|guess|y\'know)\b',
+    re.IGNORECASE
+)
 
 def split_sentences(text: str) -> List[str]:
     """Splits paragraph text cleanly into individual sentences, preserving punctuation."""

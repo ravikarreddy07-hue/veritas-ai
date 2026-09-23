@@ -23,7 +23,11 @@ from .linguistics import (
     calculate_readability,
     AI_CLICHE_PATTERNS,
     AI_FAVORED_OPENERS,
-    STOPWORDS
+    STOPWORDS,
+    has_passive_voice,
+    count_nominalizations,
+    FIRST_PERSON_REGEX,
+    CONVERSATIONAL_REGEX
 )
 
 logger = logging.getLogger("AIDetector")
@@ -271,50 +275,94 @@ class AIDetector:
         burstiness_val: float
     ) -> List[float]:
         """
-        Proprietary statistical classifier for computing sentence-level AI probabilities
+        Proprietary multi-signal statistical classifier for computing sentence-level AI probabilities
         when running in memory-constrained environments where the 1.7GB neural model is offline.
-        Evaluates multi-signal linguistic dimensions per sentence.
+        Evaluates:
+          1. Cliché and trope pattern density
+          2. Formulaic discourse markers & openers
+          3. Passive voice density (is/are/was/were + participle)
+          4. Abstract nominalization ratio (-tion, -ment, -ity, -ance)
+          5. Syntactic uniformity & burstiness variance
+          6. Conversational, first-person, and contraction markers (human rewards)
         """
         probabilities: List[float] = []
-        for sent in sentences:
-            words = tokenize_words(sent)
+        doc_words = [tokenize_words(s) for s in sentences]
+        sent_lens = [len(w) for w in doc_words]
+        mean_len = statistics.mean(sent_lens) if sent_lens else 0.0
+
+        for idx, sent in enumerate(sentences):
+            words = doc_words[idx]
             w_count = len(words)
-            # Baseline human conversational prior — raised to improve AI signal separation
-            p = 0.18
+            if w_count == 0:
+                probabilities.append(0.05)
+                continue
+
+            # Baseline prior: calibrated to clean human conversational English
+            p = 0.22
 
             # 1. AI Cliché and Buzzword Pattern Density
             cliches_in_sent = 0
             for regex, info in self.cliche_compiled:
                 if regex.search(sent):
                     cliches_in_sent += 1
-                    p += 0.38  # Raised from 0.30 — single strong cliché should reliably flag AI
+                    p += 0.35
 
-            # 2. AI-Favored Formulaic Openers
+            # 2. AI-Favored Formulaic Openers & Transitions
             s_lower = sent.lower().strip()
             for op in AI_FAVORED_OPENERS:
                 if s_lower.startswith(op):
                     p += 0.25
                     break
 
-            # 3. Burstiness Cadence (Uniformity vs Variance)
-            if burstiness_val < 0.25:
-                p += 0.12
-            elif burstiness_val > 0.60:
-                p -= 0.15
+            # 3. Passive Voice (genuine be + past participle, avoiding false positives)
+            if has_passive_voice(sent):
+                p += 0.22
 
-            # 4. Robotic Sentence Length Window (14-28 words)
-            if 14 <= w_count <= 28 and (cliches_in_sent > 0 or p > 0.35):
+            # 4. Latinate Abstract Nominalizations (-tion, -ment, -ance, -ity)
+            n_noms = count_nominalizations(sent)
+            if n_noms >= 2:
+                p += 0.20
+            elif n_noms == 1:
                 p += 0.10
 
-            # 5. Natural Human Conversational Signals
+            # 5. Sentence Cadence & Uniformity
+            if burstiness_val < 0.20:
+                p += 0.12
+            elif burstiness_val < 0.28:
+                p += 0.06
+            elif burstiness_val > 0.45:
+                p -= 0.12
+
+            # Standard robotic window: sentences clustered at 14-26 words
+            if 14 <= w_count <= 26:
+                if abs(w_count - mean_len) <= 4:
+                    p += 0.06
+
+            # 6. Natural Human Conversational Signals (Negative AI weights)
+            # First person pronouns (I, me, my, we, us, our, you, your)
+            first_person_matches = FIRST_PERSON_REGEX.findall(sent)
+            if first_person_matches:
+                p -= min(0.30, len(first_person_matches) * 0.15)
+
+            # Natural contractions (it's, don't, wasn't, we'd, etc.)
+            contractions_count = sum(1 for c in ["'", "’"] if c in sent)
+            if contractions_count > 0:
+                p -= min(0.24, contractions_count * 0.12)
+
+            # Conversational particles (honestly, actually, pretty much, just, etc.)
+            conversational_matches = CONVERSATIONAL_REGEX.findall(sent)
+            if conversational_matches:
+                p -= min(0.20, len(conversational_matches) * 0.10)
+
+            # Very short punchy human sentences
             if w_count <= 8:
                 p -= 0.20
-            if any(c in sent for c in ["'", "'"]):
-                p -= 0.08
-            if re.search(r'\b(i|me|my|we|us|our|you|your)\b', sent, re.IGNORECASE):
-                p -= 0.10  # Reduced from -0.18 — AI essays often use first-person voice
 
-            probabilities.append(max(0.01, min(0.99, p)))
+            # Expressive human punctuation (exclamation, dash, etc.)
+            if "!" in sent or "—" in sent or "--" in sent:
+                p -= 0.12
+
+            probabilities.append(max(0.02, min(0.98, p)))
         return probabilities
 
     async def analyze_async(self, text: str) -> Dict[str, Any]:
@@ -425,71 +473,91 @@ class AIDetector:
 
             # Primary probability (calibrated 0% to 100%)
             model_prob = raw_probabilities[idx] if idx < len(raw_probabilities) else 0.12
-            if self.has_model and self.model is not None:
-                calibrated_prob = self._calibrate_probability(model_prob)
-            else:
-                calibrated_prob = model_prob
-            model_score = calibrated_prob * 100.0
-
             reasons = []
 
-            # Secondary signal: Burstiness penalty / reward (10% weight)
-            # Blended base = 85% neural model + 10% burstiness
-            base_score = (model_score * 0.85) + (burstiness_ai_score * 0.10)
+            if self.has_model and self.model is not None:
+                calibrated_prob = self._calibrate_probability(model_prob)
+                model_score = calibrated_prob * 100.0
 
-            # Minor bonus signal: Cliché and Opener nudge (max +5% to +10% bonus nudge, never main classifier)
-            cliche_nudge = 0.0
-            for regex, info in self.cliche_compiled:
-                if regex.search(sent):
-                    cliche_nudge += 5.0
-                    reasons.append(f"Contains {info['desc']}")
-                    break
+                # Secondary signal: Burstiness penalty / reward (10% weight)
+                base_score = (model_score * 0.85) + (burstiness_ai_score * 0.10)
 
-            s_lower = sent.lower().strip()
-            for op in AI_FAVORED_OPENERS:
-                if s_lower.startswith(op):
-                    cliche_nudge += 3.0
-                    reasons.append(f"Overused opener '{op}'")
-                    break
+                # Minor bonus signal: Cliché and Opener nudge
+                cliche_nudge = 0.0
+                for regex, info in self.cliche_compiled:
+                    if regex.search(sent):
+                        cliche_nudge += 5.0
+                        reasons.append(f"Contains {info['desc']}")
+                        break
 
-            cliche_nudge = min(10.0, cliche_nudge)
+                s_lower = sent.lower().strip()
+                for op in AI_FAVORED_OPENERS:
+                    if s_lower.startswith(op):
+                        cliche_nudge += 3.0
+                        reasons.append(f"Overused opener '{op}'")
+                        break
 
-            # Conversational/natural human cadence rewards
-            cadence_bonus = 0.0
-            if word_count <= 8:
-                cadence_bonus += 5.0
-                reasons.append("Short punchy human cadence")
-            if any(c in sent for c in ["'", "’"]):
-                cadence_bonus += 4.0
-                reasons.append("Natural contraction")
-            if re.search(r'\b(i|me|my|we|us|our|you|your)\b', sent, re.IGNORECASE):
-                cadence_bonus += 4.0
-                reasons.append("First-person human voice")
+                cliche_nudge = min(10.0, cliche_nudge)
 
-            cadence_bonus = min(10.0, cadence_bonus)
+                # Conversational/natural human cadence rewards
+                cadence_bonus = 0.0
+                if word_count <= 8:
+                    cadence_bonus += 5.0
+                    reasons.append("Short punchy human cadence")
+                if any(c in sent for c in ["'", "’"]):
+                    cadence_bonus += 4.0
+                    reasons.append("Natural contraction")
+                if re.search(r'\b(i|me|my|we|us|our|you|your)\b', sent, re.IGNORECASE):
+                    cadence_bonus += 4.0
+                    reasons.append("First-person human voice")
 
-            # Final blended sentence score
-            final_s_score = max(0.0, min(100.0, base_score + cliche_nudge - cadence_bonus))
+                cadence_bonus = min(10.0, cadence_bonus)
+                final_s_score = max(0.0, min(100.0, base_score + cliche_nudge - cadence_bonus))
+            else:
+                # In statistical mode, model_prob is already the comprehensive multi-signal score
+                calibrated_prob = model_prob
+                model_score = calibrated_prob * 100.0
+                final_s_score = max(0.0, min(100.0, model_score))
+
+                # Identify primary reasons for UI heatmap tooltip
+                for regex, info in self.cliche_compiled:
+                    if regex.search(sent):
+                        reasons.append(f"Contains {info['desc']}")
+                        break
+                s_lower = sent.lower().strip()
+                for op in AI_FAVORED_OPENERS:
+                    if s_lower.startswith(op):
+                        reasons.append(f"Formulaic opener '{op}'")
+                        break
+                if has_passive_voice(sent):
+                    reasons.append("Passive voice construction")
+                if count_nominalizations(sent) > 0:
+                    reasons.append("Dense abstract nominalization")
+                if FIRST_PERSON_REGEX.search(sent):
+                    reasons.append("First-person personal voice")
+                if any(c in sent for c in ["'", "’"]):
+                    reasons.append("Natural contraction")
+
             sentence_scores.append(final_s_score)
 
-            # Sentence Classification Thresholds (tightened for better AI detection):
-            # Red (>= 55%): AI / GPT Generated  — lowered from 65% to catch more AI sentences
-            # Yellow (42% - 54%): Mixed / partial AI  — updated band
-            # Green (< 42%): Likely Human
-            if final_s_score >= 55.0:
+            # Sentence Classification Thresholds:
+            # Red (>= 58%): AI / GPT Generated
+            # Yellow (38% - 57%): Mixed / partial AI
+            # Green (< 38%): Likely Human
+            if final_s_score >= 58.0:
                 classification = "Likely AI"
                 color_class = "bg-red-500/20 border-red-500/50 text-red-200"
                 highlight_color = "red"
                 is_ai = True
                 if not reasons:
-                    reasons.append(f"High AI pattern ({round(model_score)}%)")
-            elif final_s_score >= 42.0:
+                    reasons.append(f"Machine cadence & syntax pattern ({round(final_s_score)}%)")
+            elif final_s_score >= 38.0:
                 classification = "Mixed"
                 color_class = "bg-yellow-500/20 border-yellow-500/50 text-yellow-200"
                 highlight_color = "yellow"
                 is_ai = False
                 if not reasons:
-                    reasons.append(f"Moderate AI probability ({round(model_score)}%)")
+                    reasons.append(f"Moderate machine cadence ({round(final_s_score)}%)")
             else:
                 classification = "Likely Human"
                 color_class = "bg-emerald-500/20 border-emerald-500/50 text-emerald-200"
@@ -513,23 +581,23 @@ class AIDetector:
             })
 
         # 5. Veritas Volume-Weighted Metric Calculation:
-        # aiWords: Count of actual words in sentences crossing the AI threshold (is_ai == True).
         ai_words = sum(s["words"] for s in analyzed_sentences if s["is_ai"])
         mixed_words = sum(s["words"] for s in analyzed_sentences if s["classification"] == "Mixed")
-        avg_sent_score = statistics.mean(sentence_scores) if sentence_scores else 0.0
+        weighted_avg_score = sum(s["words"] * s["score"] for s in analyzed_sentences) / total_words if total_words > 0 else 0.0
 
         if total_words == 0:
             fake_percentage = 0.0
-        elif ai_words == 0 and mixed_words == 0:
-            # Authentic human baseline: slight non-zero variance (2.0% - 14.0%) reflecting natural language
-            fake_percentage = round(min(14.0, max(2.0, avg_sent_score)), 1)
-        elif ai_words == 0 and mixed_words > 0:
-            # Mixed region: raised multiplier and cap to better reflect AI-heavy mixed text (35%–50%)
-            mixed_ratio = (mixed_words / total_words) * 40.0
-            fake_percentage = round(min(50.0, max(15.0, mixed_ratio)), 1)
+        elif ai_words > 0:
+            # When AI sentences exist: blend AI word ratio with sentence severity
+            ai_ratio = (ai_words / total_words) * 100.0
+            blended = (ai_ratio * 0.65) + (weighted_avg_score * 0.35)
+            fake_percentage = round(min(100.0, max(ai_ratio, blended)), 1)
+        elif mixed_words > 0:
+            # Mixed text without definitive AI sentences
+            fake_percentage = round(min(58.0, max(20.0, weighted_avg_score)), 1)
         else:
-            raw_word_ratio = (ai_words / total_words * 100.0)
-            fake_percentage = round(min(100.0, max(raw_word_ratio, avg_sent_score)), 1)
+            # Completely human sentences
+            fake_percentage = round(min(14.0, max(2.0, weighted_avg_score * 0.35)), 1)
 
         ai_percentage = int(max(0, min(100, round(fake_percentage))))
         human_percentage = 100 - ai_percentage
