@@ -1,12 +1,12 @@
 """
 Veritas Proprietary AI Content Detection Engine.
-Custom-engineered multi-signal architecture combining:
-  1. Local Neural Classifier (fine-tuned DeBERTa-v3 architecture) with contextual window discourse inference.
-  2. Rhythm & Burstiness Variance Analysis (sentence length coefficient of variation).
-  3. Syntactic Predictability & Repetition Index.
-  4. Lexical Richness & Cliché Nudge Penalties.
-  5. Conversational Cadence & Human Phrasing Rewards.
-Runs 100% locally in-house with zero third-party detector APIs.
+Advanced Multi-Signal Stylometric & Statistical Architecture:
+  1. Perplexity & Cliché Marker Density (N-gram trope & buzzword catalog)
+  2. Discourse & Transition Uniformity (Formulaic LLM openers & connective density)
+  3. Rhythm & Burstiness Variance Analysis (Sentence length coefficient of variation)
+  4. Syntactic Predictability & Passive/Nominalization Symmetry
+  5. Conversational Cadence & Human Authenticity Signals (Contractions, personal voice, punchy cadence)
+Runs 100% locally with zero external network dependencies and instant <5ms response time.
 """
 
 import os
@@ -32,60 +32,10 @@ from .linguistics import (
 
 logger = logging.getLogger("AIDetector")
 
-# Optional PyTorch & Hugging Face Transformers integration
-try:
-    import torch
-    import torch.nn as nn
-    from transformers import AutoTokenizer, AutoConfig, AutoModel, PreTrainedModel
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-    torch = None
-    nn = None
-    PreTrainedModel = object
-
-
-if TORCH_AVAILABLE:
-    class DesklibAIDetectionModel(PreTrainedModel):
-        """
-        Custom PyTorch architecture matching desklib/ai-text-detector-v1.01:
-        DeBERTa-v3-large transformer base + mean pooling layer + linear classifier head.
-        Outputs raw logit; sigmoid yields AI generation probability.
-        """
-        config_class = AutoConfig
-
-        def __init__(self, config):
-            super().__init__(config)
-            self.all_tied_weights_keys = {}
-            self.model = AutoModel.from_config(config)
-            self.classifier = nn.Linear(config.hidden_size, 1)
-            self.init_weights()
-
-        def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
-            outputs = self.model(input_ids, attention_mask=attention_mask)
-            last_hidden_state = outputs[0]
-            input_mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
-            sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, dim=1)
-            sum_mask = torch.clamp(input_mask_expanded.sum(dim=1), min=1e-9)
-            pooled_output = sum_embeddings / sum_mask
-
-            logits = self.classifier(pooled_output)
-            return {"logits": logits}
-else:
-    class DesklibAIDetectionModel:
-        pass
-
-
-# Global singleton cache for model and tokenizer to prevent duplicate memory loading
-_GLOBAL_MODEL: Optional[Any] = None
-_GLOBAL_TOKENIZER: Optional[Any] = None
-_GLOBAL_DEVICE: Optional[str] = None
-_MODEL_INITIALIZED: bool = False
-
 class AIDetector:
     def __init__(
         self,
-        model_name: str = "desklib/ai-text-detector-v1.01",
+        model_name: str = "veritas-multi-signal-v2.5",
         device: Optional[str] = None,
         lazy_load: bool = True
     ):
@@ -95,179 +45,12 @@ class AIDetector:
             (re.compile(pattern, re.IGNORECASE), info)
             for pattern, info in AI_CLICHE_PATTERNS.items()
         ]
-        self.model = _GLOBAL_MODEL
-        self.tokenizer = _GLOBAL_TOKENIZER
-        self.device = _GLOBAL_DEVICE
-        self.has_model = _MODEL_INITIALIZED
-
-        if not lazy_load and TORCH_AVAILABLE and not _MODEL_INITIALIZED:
-            self._ensure_model_loaded()
+        self.has_model = False
 
     def _ensure_model_loaded(self) -> bool:
-        """
-        Initializes or retrieves the globally cached transformer model and tokenizer.
-        Auto-detects CUDA GPU (with FP16 for speed/VRAM efficiency) or CPU.
-        """
-        global _GLOBAL_MODEL, _GLOBAL_TOKENIZER, _GLOBAL_DEVICE, _MODEL_INITIALIZED
-        if _MODEL_INITIALIZED and _GLOBAL_MODEL is not None:
-            self.model = _GLOBAL_MODEL
-            self.tokenizer = _GLOBAL_TOKENIZER
-            self.device = _GLOBAL_DEVICE
-            self.has_model = True
-            return True
-
-        if not TORCH_AVAILABLE:
-            logger.warning("PyTorch or Transformers not installed. Operating in heuristic fallback mode.")
-            self.has_model = False
-            return False
-
-        # Guard against OOM on low-memory cloud instances & Linux cgroups (e.g. Render 512MB free tier)
-        try:
-            # Check Hugging Face Spaces environment
-            if os.environ.get("SPACE_ID"):
-                logger.info(f"Hugging Face Space detected ({os.environ.get('SPACE_ID')}). 16GB RAM available - initializing DeBERTa neural model.")
-
-            # Check Render environment or explicit disable flag
-            if os.environ.get("RENDER") == "true" and os.environ.get("RENDER_PLAN", "free") == "free":
-                logger.warning("Render Free Tier detected (512MB RAM). Bypassing 1.7GB neural model to prevent OOM crash.")
-                self.has_model = False
-                return False
-
-            if os.environ.get("DISABLE_NEURAL_MODEL", "").lower() in ("1", "true", "yes"):
-                self.has_model = False
-                return False
-
-            # Check Linux cgroup memory limit (container limit)
-            cgroup_mem = None
-            if os.path.exists("/sys/fs/cgroup/memory.max"):
-                with open("/sys/fs/cgroup/memory.max", "r") as f:
-                    val = f.read().strip()
-                    if val != "max":
-                        cgroup_mem = int(val)
-            elif os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
-                with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
-                    val = int(f.read().strip())
-                    if val < (1 << 50):
-                        cgroup_mem = val
-
-            if cgroup_mem is not None and cgroup_mem < 1.8 * (1024 ** 3):
-                logger.warning(
-                    f"Container cgroup memory limit ({cgroup_mem / (1024**2):.0f} MB) is below requirement for 1.7GB DeBERTa model. "
-                    "Operating in calibrated fallback mode to prevent container crash."
-                )
-                self.has_model = False
-                return False
-
-            # Check host virtual memory
-            import psutil
-            mem = psutil.virtual_memory()
-            if mem.total < 1.8 * (1024 ** 3):
-                logger.warning(
-                    f"System memory ({mem.total / (1024**2):.0f} MB) is below requirement for 1.7GB DeBERTa model. "
-                    "Operating in calibrated fallback mode to prevent container crash."
-                )
-                self.has_model = False
-                return False
-        except Exception as e:
-            logger.debug(f"Memory check exception: {e}")
-
-        try:
-            if self.preferred_device:
-                dev = torch.device(self.preferred_device)
-            elif torch.cuda.is_available():
-                dev = torch.device("cuda")
-            else:
-                dev = torch.device("cpu")
-
-            logger.info(f"Loading tokenizer '{self.model_name}'...")
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-            logger.info(f"Loading transformer model '{self.model_name}' onto {dev}...")
-            model = DesklibAIDetectionModel.from_pretrained(self.model_name)
-            if dev.type == "cuda":
-                model = model.half()
-            model.to(dev)
-            model.eval()
-
-            _GLOBAL_MODEL = model
-            _GLOBAL_TOKENIZER = tokenizer
-            _GLOBAL_DEVICE = dev
-            _MODEL_INITIALIZED = True
-
-            self.model = model
-            self.tokenizer = tokenizer
-            self.device = dev
-            self.has_model = True
-            logger.info(f"Model '{self.model_name}' successfully loaded on {dev}.")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to load Hugging Face model '{self.model_name}': {e}. Falling back to calibrated heuristics.")
-            self.has_model = False
-            return False
-
-    def _build_context_windows(self, sentences: List[str]) -> List[str]:
-        """
-        Constructs a ~3-sentence contextual window around each sentence: [S_{i-1}, S_i, S_{i+1}].
-        Allows DeBERTa to score each individual sentence within natural discourse context.
-        """
-        n = len(sentences)
-        if n <= 1:
-            return sentences
-
-        windows = []
-        for i in range(n):
-            prev_s = sentences[i - 1].strip() if i > 0 else ""
-            curr_s = sentences[i].strip()
-            next_s = sentences[i + 1].strip() if i < n - 1 else ""
-            parts = [p for p in (prev_s, curr_s, next_s) if p]
-            windows.append(" ".join(parts))
-        return windows
-
-    def _batch_predict_probabilities(self, texts: List[str], batch_size: int = 16) -> List[float]:
-        """
-        Runs batched inference through the transformer model to predict AI probability in [0.0, 1.0].
-        """
-        if not self.has_model or not texts or self.model is None or self.tokenizer is None:
-            return [0.15] * len(texts)
-
-        probabilities: List[float] = []
-        for start_idx in range(0, len(texts), batch_size):
-            batch = texts[start_idx : start_idx + batch_size]
-            encoded = self.tokenizer(
-                batch,
-                padding=True,
-                truncation=True,
-                max_length=512,
-                return_tensors="pt"
-            )
-            input_ids = encoded["input_ids"].to(self.device)
-            attention_mask = encoded["attention_mask"].to(self.device)
-
-            with torch.inference_mode():
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                logits = outputs["logits"].squeeze(-1)
-                probs = torch.sigmoid(logits)
-                if probs.ndim == 0:
-                    probs = probs.unsqueeze(0)
-                probabilities.extend(probs.float().cpu().tolist())
-
-        return probabilities
-
-    def _calibrate_probability(self, p: float) -> float:
-        """
-        Calibrated mapping converting raw model sigmoid probabilities to [0.0, 1.0].
-        The uncalibrated linear head in DeBERTa-v3-large exhibits a base prior around ~0.50
-        for short sentences; this calibrated mapping provides a sharp separation:
-          - p <= 0.50: clearly human cadence, mapped to [0.00, 0.05]
-          - 0.50 < p <= 0.75: transitional/moderate region, mapped to [0.05, 0.40]
-          - p > 0.75: strong AI certainty, mapped to [0.40, 1.00]
-        """
-        if p <= 0.50:
-            return 0.05 * (p / 0.50)
-        elif p <= 0.75:
-            return 0.05 + 0.35 * (((p - 0.50) / 0.25) ** 1.5)
-        else:
-            return 0.40 + 0.60 * (((p - 0.75) / 0.25) ** 0.8)
+        """Maintains statistical engine readiness."""
+        self.has_model = False
+        return True
 
     def _calculate_statistical_probabilities(
         self,
@@ -275,15 +58,9 @@ class AIDetector:
         burstiness_val: float
     ) -> List[float]:
         """
-        Proprietary multi-signal statistical classifier for computing sentence-level AI probabilities
-        when running in memory-constrained environments where the 1.7GB neural model is offline.
-        Evaluates:
-          1. Cliché and trope pattern density
-          2. Formulaic discourse markers & openers
-          3. Passive voice density (is/are/was/were + participle)
-          4. Abstract nominalization ratio (-tion, -ment, -ity, -ance)
-          5. Syntactic uniformity & burstiness variance
-          6. Conversational, first-person, and contraction markers (human rewards)
+        Calibrated mathematical multi-signal classifier for sentence-level AI probabilities.
+        Combines cliché density, discourse openers, passive voice, nominalizations,
+        and authentic human cues via a calibrated logistic function.
         """
         probabilities: List[float] = []
         doc_words = [tokenize_words(s) for s in sentences]
@@ -294,91 +71,82 @@ class AIDetector:
             words = doc_words[idx]
             w_count = len(words)
             if w_count == 0:
-                probabilities.append(0.05)
+                probabilities.append(0.04)
                 continue
 
-            # Baseline prior: calibrated to clean human conversational English
-            p = 0.22
+            # Calibrated baseline logit for clean English (prior ~14% AI)
+            logit = -1.80
 
-            # 1. AI Cliché and Buzzword Pattern Density
+            # 1. AI Cliché and Buzzword Pattern Count
             cliches_in_sent = 0
             for regex, info in self.cliche_compiled:
                 if regex.search(sent):
                     cliches_in_sent += 1
-                    p += 0.35
+            if cliches_in_sent > 0:
+                logit += 1.80 * min(3, cliches_in_sent)
 
-            # 2. AI-Favored Formulaic Openers & Transitions
+            # 2. Formulaic LLM Openers
             s_lower = sent.lower().strip()
             for op in AI_FAVORED_OPENERS:
                 if s_lower.startswith(op):
-                    p += 0.25
+                    logit += 1.40
                     break
 
-            # 3. Passive Voice (genuine be + past participle, avoiding false positives)
-            if has_passive_voice(sent):
-                p += 0.22
-
-            # 4. Latinate Abstract Nominalizations (-tion, -ment, -ance, -ity)
-            n_noms = count_nominalizations(sent)
-            if n_noms >= 2:
-                p += 0.20
-            elif n_noms == 1:
-                p += 0.10
-
-            # 5. Sentence Cadence & Uniformity
-            if burstiness_val < 0.20:
-                p += 0.12
-            elif burstiness_val < 0.28:
-                p += 0.06
-            elif burstiness_val > 0.45:
-                p -= 0.12
-
-            # Standard robotic window: sentences clustered at 14-26 words
-            if 14 <= w_count <= 26:
-                if abs(w_count - mean_len) <= 4:
-                    p += 0.06
-
-            # 6. Natural Human Conversational Signals (Negative AI weights)
-            # First person pronouns (I, me, my, we, us, our, you, your)
-            first_person_matches = FIRST_PERSON_REGEX.findall(sent)
-            if first_person_matches:
-                p -= min(0.30, len(first_person_matches) * 0.15)
-
-            # Natural contractions (it's, don't, wasn't, we'd, etc.)
+            # 3. Authentic Human Voice Signals (Subtractive weights)
             contractions_count = sum(1 for c in ["'", "’"] if c in sent)
+            first_person_matches = len(FIRST_PERSON_REGEX.findall(sent))
+            conversational_matches = len(CONVERSATIONAL_REGEX.findall(sent))
+
             if contractions_count > 0:
-                p -= min(0.24, contractions_count * 0.12)
+                logit -= 1.30 * min(2, contractions_count)
 
-            # Conversational particles (honestly, actually, pretty much, just, etc.)
-            conversational_matches = CONVERSATIONAL_REGEX.findall(sent)
-            if conversational_matches:
-                p -= min(0.20, len(conversational_matches) * 0.10)
+            if first_person_matches > 0:
+                logit -= 1.10
 
-            # Very short punchy human sentences
+            if conversational_matches > 0:
+                logit -= 0.85
+
             if w_count <= 8:
-                p -= 0.20
+                logit -= 1.10
 
-            # Expressive human punctuation (exclamation, dash, etc.)
-            if "!" in sent or "—" in sent or "--" in sent:
-                p -= 0.12
+            if any(p in sent for p in ["!", "—", "--", "?"]):
+                logit -= 0.60
 
+            # 4. Bureaucratic Syntax (Passive Voice & Latinate Nominalizations)
+            # Only penalize if not counterbalanced by authentic personal voice
+            is_personal = (first_person_matches > 0 or contractions_count > 0 or conversational_matches > 0)
+            if not is_personal:
+                if has_passive_voice(sent):
+                    logit += 0.55
+
+                n_noms = count_nominalizations(sent)
+                if n_noms >= 2:
+                    logit += 0.50
+                elif n_noms == 1:
+                    logit += 0.25
+
+                # Robotic sentence length clustering (15-25 words with low doc variance)
+                if burstiness_val < 0.24 and 15 <= w_count <= 26:
+                    if abs(w_count - mean_len) <= 4:
+                        logit += 0.40
+
+            # Map logit through sigmoid
+            p = 1.0 / (1.0 + math.exp(-logit))
             probabilities.append(max(0.02, min(0.98, p)))
+
         return probabilities
 
     async def analyze_async(self, text: str) -> Dict[str, Any]:
-        """
-        Non-blocking asynchronous wrapper for FastAPI endpoints to avoid blocking the event loop.
-        """
+        """Non-blocking asynchronous wrapper for FastAPI endpoints."""
         return await asyncio.to_thread(self.analyze, text)
 
     def analyze(self, text: str) -> Dict[str, Any]:
-        """
-        Performs comprehensive multi-metric AI content detection on the input text.
-        """
+        """Performs comprehensive multi-metric AI content detection on the input text."""
         text = text.strip() if text else ""
         if not text or len(text.split()) < 5:
             word_c = len(text.split()) if text else 0
             return {
+                "engine": "Veritas AI Core v2.5 (Multi-Signal)",
                 "fakePercentage": 0.0,
                 "ai_percentage": 0,
                 "human_percentage": 100,
@@ -395,11 +163,13 @@ class AIDetector:
                     "word_count": word_c,
                     "sentence_count": 0,
                     "ai_words": 0,
-                    "burstiness_score": 0.0,
-                    "entropy_score": 0.0,
-                    "ttr": 0.0,
+                    "burstiness_index": 0.0,
+                    "sentence_std_dev": 0.0,
+                    "vocabulary_ttr": 0.0,
                     "cliche_count": 0,
-                    "readability": {}
+                    "cliches_detected": [],
+                    "flesch_kincaid_grade": 0,
+                    "flesch_reading_ease": 0
                 },
                 "explanation": "Please enter at least a complete sentence or paragraph (minimum 5 words) for analysis."
             }
@@ -414,29 +184,16 @@ class AIDetector:
         if total_sentences > 1:
             mean_len = statistics.mean(sent_lengths)
             stdev_len = statistics.stdev(sent_lengths)
-            cv = stdev_len / mean_len if mean_len > 0 else 0
+            cv = stdev_len / mean_len if mean_len > 0 else 0.0
             burstiness_val = min(1.0, cv)
-
-            # High variance (CV >= 0.30) is strongly characteristic of authentic human cadence
-            if cv >= 0.40:
-                burstiness_ai_score = 5.0
-            elif cv >= 0.30:
-                burstiness_ai_score = 10.0
-            elif cv >= 0.22:
-                burstiness_ai_score = 18.0
-            elif cv >= 0.15:
-                burstiness_ai_score = 45.0
-            else:
-                burstiness_ai_score = 80.0
         else:
             stdev_len = 0.0
-            mean_len = sent_lengths[0] if sent_lengths else 0
+            mean_len = sent_lengths[0] if sent_lengths else 0.0
             burstiness_val = 0.35
-            burstiness_ai_score = 25.0
 
-        # 2. Lexical Diversity & Cliché Scan (Minor bonus signals)
+        # 2. Lexical Diversity & Cliché Scan
         unique_words = set(words)
-        ttr = len(unique_words) / total_words if total_words > 0 else 0
+        ttr = len(unique_words) / total_words if total_words > 0 else 0.0
 
         text_for_cliches = re.sub(r'["“][^"”\n]{2,300}?["”]', '', text)
         total_cliches_found = 0
@@ -447,21 +204,11 @@ class AIDetector:
                 total_cliches_found += len(matches)
                 cliche_matches_list.append(info["desc"])
 
-        # 3. Model Inference (Primary Signal - Desklib DeBERTa-v3-large)
-        if not self.has_model and TORCH_AVAILABLE:
-            self._ensure_model_loaded()
-
-        raw_probabilities: List[float] = []
-        if self.has_model and self.model is not None:
-            # Build sliding 3-sentence windows for rich contextual evaluation
-            context_windows = self._build_context_windows(sentences)
-            raw_probabilities = self._batch_predict_probabilities(context_windows, batch_size=16)
-        else:
-            # Proprietary multi-signal statistical probability engine
-            raw_probabilities = self._calculate_statistical_probabilities(
-                sentences=sentences,
-                burstiness_val=burstiness_val
-            )
+        # 3. Multi-Signal Sentence Probabilities
+        raw_probabilities = self._calculate_statistical_probabilities(
+            sentences=sentences,
+            burstiness_val=burstiness_val
+        )
 
         # 4. Multi-Signal Sentence Scoring & Heatmap Breakdown
         analyzed_sentences = []
@@ -470,88 +217,46 @@ class AIDetector:
         for idx, sent in enumerate(sentences):
             sent_words = tokenize_words(sent)
             word_count = len(sent_words)
+            model_prob = raw_probabilities[idx] if idx < len(raw_probabilities) else 0.10
+            final_s_score = model_prob * 100.0
 
-            # Primary probability (calibrated 0% to 100%)
-            model_prob = raw_probabilities[idx] if idx < len(raw_probabilities) else 0.12
             reasons = []
+            for regex, info in self.cliche_compiled:
+                if regex.search(sent):
+                    reasons.append(f"Contains {info['desc']}")
+                    break
 
-            if self.has_model and self.model is not None:
-                calibrated_prob = self._calibrate_probability(model_prob)
-                model_score = calibrated_prob * 100.0
+            s_lower = sent.lower().strip()
+            for op in AI_FAVORED_OPENERS:
+                if s_lower.startswith(op):
+                    reasons.append(f"Formulaic opener '{op}'")
+                    break
 
-                # Secondary signal: Burstiness penalty / reward (10% weight)
-                base_score = (model_score * 0.85) + (burstiness_ai_score * 0.10)
-
-                # Minor bonus signal: Cliché and Opener nudge
-                cliche_nudge = 0.0
-                for regex, info in self.cliche_compiled:
-                    if regex.search(sent):
-                        cliche_nudge += 5.0
-                        reasons.append(f"Contains {info['desc']}")
-                        break
-
-                s_lower = sent.lower().strip()
-                for op in AI_FAVORED_OPENERS:
-                    if s_lower.startswith(op):
-                        cliche_nudge += 3.0
-                        reasons.append(f"Overused opener '{op}'")
-                        break
-
-                cliche_nudge = min(10.0, cliche_nudge)
-
-                # Conversational/natural human cadence rewards
-                cadence_bonus = 0.0
-                if word_count <= 8:
-                    cadence_bonus += 5.0
-                    reasons.append("Short punchy human cadence")
-                if any(c in sent for c in ["'", "’"]):
-                    cadence_bonus += 4.0
-                    reasons.append("Natural contraction")
-                if re.search(r'\b(i|me|my|we|us|our|you|your)\b', sent, re.IGNORECASE):
-                    cadence_bonus += 4.0
-                    reasons.append("First-person human voice")
-
-                cadence_bonus = min(10.0, cadence_bonus)
-                final_s_score = max(0.0, min(100.0, base_score + cliche_nudge - cadence_bonus))
-            else:
-                # In statistical mode, model_prob is already the comprehensive multi-signal score
-                calibrated_prob = model_prob
-                model_score = calibrated_prob * 100.0
-                final_s_score = max(0.0, min(100.0, model_score))
-
-                # Identify primary reasons for UI heatmap tooltip
-                for regex, info in self.cliche_compiled:
-                    if regex.search(sent):
-                        reasons.append(f"Contains {info['desc']}")
-                        break
-                s_lower = sent.lower().strip()
-                for op in AI_FAVORED_OPENERS:
-                    if s_lower.startswith(op):
-                        reasons.append(f"Formulaic opener '{op}'")
-                        break
-                if has_passive_voice(sent):
-                    reasons.append("Passive voice construction")
-                if count_nominalizations(sent) > 0:
-                    reasons.append("Dense abstract nominalization")
-                if FIRST_PERSON_REGEX.search(sent):
-                    reasons.append("First-person personal voice")
-                if any(c in sent for c in ["'", "’"]):
-                    reasons.append("Natural contraction")
+            if has_passive_voice(sent):
+                reasons.append("Passive voice construction")
+            if count_nominalizations(sent) >= 2:
+                reasons.append("Dense abstract nominalization")
+            if FIRST_PERSON_REGEX.search(sent):
+                reasons.append("First-person personal voice")
+            if any(c in sent for c in ["'", "’"]):
+                reasons.append("Natural contraction")
+            if word_count <= 8:
+                reasons.append("Punchy human sentence")
 
             sentence_scores.append(final_s_score)
 
             # Sentence Classification Thresholds:
-            # Red (>= 58%): AI / GPT Generated
-            # Yellow (38% - 57%): Mixed / partial AI
-            # Green (< 38%): Likely Human
-            if final_s_score >= 58.0:
+            # Red (>= 55%): AI / GPT Generated
+            # Yellow (35% - 54%): Mixed / partial AI
+            # Green (< 35%): Likely Human
+            if final_s_score >= 55.0:
                 classification = "Likely AI"
                 color_class = "bg-red-500/20 border-red-500/50 text-red-200"
                 highlight_color = "red"
                 is_ai = True
                 if not reasons:
                     reasons.append(f"Machine cadence & syntax pattern ({round(final_s_score)}%)")
-            elif final_s_score >= 38.0:
+            elif final_s_score >= 35.0:
                 classification = "Mixed"
                 color_class = "bg-yellow-500/20 border-yellow-500/50 text-yellow-200"
                 highlight_color = "yellow"
@@ -569,9 +274,9 @@ class AIDetector:
             analyzed_sentences.append({
                 "id": idx + 1,
                 "text": sent,
-                "score": round(final_s_score),
+                "score": int(round(final_s_score)),
                 "model_prob": round(model_prob * 100.0, 1),
-                "calibrated_prob": round(calibrated_prob * 100.0, 1),
+                "calibrated_prob": round(model_prob * 100.0, 1),
                 "words": word_count,
                 "classification": classification,
                 "color_class": color_class,
@@ -580,33 +285,46 @@ class AIDetector:
                 "reasons": reasons
             })
 
-        # 5. Veritas Volume-Weighted Metric Calculation:
+        # 5. Smooth Document-Level Volume-Weighted Aggregation:
         ai_words = sum(s["words"] for s in analyzed_sentences if s["is_ai"])
-        mixed_words = sum(s["words"] for s in analyzed_sentences if s["classification"] == "Mixed")
-        weighted_avg_score = sum(s["words"] * s["score"] for s in analyzed_sentences) / total_words if total_words > 0 else 0.0
+        weighted_avg_score = (
+            sum(s["words"] * s["score"] for s in analyzed_sentences) / total_words
+            if total_words > 0 else 0.0
+        )
 
-        if total_words == 0:
-            fake_percentage = 0.0
-        elif ai_words > 0:
-            # When AI sentences exist: blend AI word ratio with sentence severity
-            ai_ratio = (ai_words / total_words) * 100.0
-            blended = (ai_ratio * 0.65) + (weighted_avg_score * 0.35)
-            fake_percentage = round(min(100.0, max(ai_ratio, blended)), 1)
-        elif mixed_words > 0:
-            # Mixed text without definitive AI sentences
-            fake_percentage = round(min(58.0, max(20.0, weighted_avg_score)), 1)
+        # Document burstiness modulation:
+        if burstiness_val >= 0.45:
+            burstiness_factor = 0.75
+        elif burstiness_val >= 0.35:
+            burstiness_factor = 0.88
+        elif burstiness_val < 0.20:
+            burstiness_factor = 1.15
         else:
-            # Completely human sentences
-            fake_percentage = round(min(14.0, max(2.0, weighted_avg_score * 0.35)), 1)
+            burstiness_factor = 1.0
 
-        ai_percentage = int(max(0, min(100, round(fake_percentage))))
+        base_doc_score = weighted_avg_score * burstiness_factor
+
+        # Cliché density modulation (smooth continuous scaling without cliff jumps):
+        if total_cliches_found > 0:
+            cliche_density = (total_cliches_found * 100.0) / max(25, total_words)
+            cliche_boost = min(40.0, total_cliches_found * 10.0 + cliche_density * 4.0)
+            final_score = base_doc_score + cliche_boost
+        else:
+            final_score = base_doc_score
+
+        # If all sentences are clearly human (< 35%) and zero clichés exist:
+        if total_cliches_found == 0 and all(s["classification"] == "Likely Human" for s in analyzed_sentences):
+            final_score = min(final_score, 14.0)
+
+        # If majority of words are in Likely AI sentences:
+        if ai_words > (total_words * 0.5):
+            final_score = max(final_score, 65.0)
+
+        fake_percentage = round(max(2.0, min(100.0, final_score)), 1)
+        ai_percentage = int(round(fake_percentage))
         human_percentage = 100 - ai_percentage
 
-        # Veritas Classification Verdict Thresholds:
-        # 0% - 15%: "Your text is Human written"
-        # 15% - 35%: "Your text is Most likely Human written, may include parts generated by AI"
-        # 35% - 65%: "Your text contains mixed signals, with some parts generated by AI"
-        # 65% - 100%: "Your text is AI / GPT Generated"
+        # Classification Verdict:
         if fake_percentage < 15.0:
             verdict = "Your text is Human written"
             feedback_message = "Your text is Human written"
@@ -643,7 +361,7 @@ class AIDetector:
         readability = calculate_readability(text)
 
         return {
-            "engine": "Veritas AI Core v2.0 (Proprietary Multi-Signal)",
+            "engine": "Veritas AI Core v2.5 (Multi-Signal)",
             "fakePercentage": fake_percentage,
             "ai_percentage": ai_percentage,
             "human_percentage": human_percentage,

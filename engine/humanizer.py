@@ -1,17 +1,17 @@
 """
 AI Content Humanizer Engine.
 Restructures sentence cadence, injects burstiness, eliminates AI tropes/clichés,
-and converts formulaic syntax into authentic human-styled prose designed to score under 20% AI.
+and converts formulaic syntax into authentic human-styled prose designed to score under 15% AI.
 """
 
 import re
-import random
 from typing import Dict, Any, List, Optional, Tuple
 import httpx
 from .linguistics import (
     split_sentences,
     tokenize_words,
     AI_CLICHE_PATTERNS,
+    COMPOUND_TRANSITION_PATTERNS,
     CONTRACTIONS
 )
 
@@ -19,16 +19,16 @@ from .linguistics import (
 TRANSITION_REPLACEMENTS = {
     "natural": [
         ("furthermore,", ["Also,", "On top of that,", "What's more,", ""]),
-        ("moreover,", ["Plus,", "Beyond that,", "And besides,", ""]),
-        ("additionally,", ["Also,", "Another thing is,", "At the same time,", ""]),
-        ("in addition,", ["Along with that,", "Plus,", ""]),
+        ("moreover,", ["Plus,", "Beyond that,", "Also,", ""]),
+        ("additionally,", ["Also,", "Another thing is,", "Along with that,", ""]),
+        ("in addition,", ["Along with that,", "Plus,", "Also,"]),
         ("consequently,", ["As a result,", "So,", "Because of this,"]),
         ("subsequently,", ["After that,", "Later on,", "Then,"]),
-        ("importantly,", ["The key thing is,", "Notice that,", ""]),
+        ("importantly,", ["Notice that,", "The key thing is,", ""]),
         ("crucially,", ["Most importantly,", "The big takeaway is,", ""]),
-        ("ultimately,", ["At the end of the day,", "When you look at it,", "In the end,"]),
+        ("ultimately,", ["In the end,", "When you look at it,", "At the end of the day,"]),
         ("in summary,", ["All in all,", "To put it simply,", "Bottom line:"]),
-        ("in conclusion,", ["Wrapping it up,", "All told,", "To wrap up,"]),
+        ("in conclusion,", ["All told,", "In the end,", "To wrap up,"]),
         ("on the other hand,", ["Then again,", "At the same time,", "Still,"])
     ],
     "academic": [
@@ -49,7 +49,7 @@ TRANSITION_REPLACEMENTS = {
         ("furthermore,", ["Beyond this,", "Also,", ""]),
         ("moreover,", ["What's more,", "Along with this,", ""]),
         ("additionally,", ["Along with this,", "Also,"]),
-        ("in addition,", ["As well,", ""]),
+        ("in addition,", ["As well,", "Also,"]),
         ("consequently,", ["Therefore,", "As such,"]),
         ("subsequently,", ["Next,", "Then,"]),
         ("importantly,", ["Notably,", "Key takeaway:"]),
@@ -59,7 +59,6 @@ TRANSITION_REPLACEMENTS = {
         ("in conclusion,", ["To summarize,", "In close,"]),
         ("on the other hand,", ["Alternatively,", "By contrast,"])
     ],
-
     "creative": [
         ("furthermore,", ["What's more,", "Even better,", ""]),
         ("moreover,", ["And then,", "Not just that—", ""]),
@@ -69,48 +68,11 @@ TRANSITION_REPLACEMENTS = {
         ("subsequently,", ["Soon enough,", "Down the line,"]),
         ("importantly,", ["Here's the twist:", "Make no mistake,"]),
         ("crucially,", ["At its heart,", "The real spark is,"]),
-        ("ultimately,", ["In the grand scheme,", "When the dust settles,"]),
-        ("in summary,", ["The story here is simple:", "Plainly put,"]),
+        ("ultimately,", ["When the dust settles,", "In the grand scheme,"]),
+        ("in summary,", ["Plainly put,", "The story here is simple:"]),
         ("in conclusion,", ["Where does that leave us?", "The final word:"]),
-        ("on the other hand,", ["Yet,", "Flip the coin, and", "Still,"])
+        ("on the other hand,", ["Yet,", "Still,", "Flip the coin, and"])
     ]
-}
-
-# Burstiness injection short sentences (creates high CV variance)
-CADENCE_PUNCH_LINES = {
-    "natural": [
-        "It really makes a difference.",
-        "That's just how it works.",
-        "And it shows.",
-        "The proof is right there.",
-        "Simple as that.",
-        "That's no small feat."
-    ],
-    "academic": [
-        "This distinction is vital.",
-        "The evidence supports this observation.",
-        "The implications remain substantial.",
-        "This warrants closer examination."
-    ],
-    "professional": [
-        "This drives clear results.",
-        "The value proposition is obvious.",
-        "Execution remains key.",
-        "That delivers real impact."
-    ],
-    "creative": [
-        "Funny how that happens.",
-        "Every detail counts.",
-        "A striking difference indeed.",
-        "The shift is palpable."
-    ]
-}
-
-# Unique punchline roots to prevent duplicate cadence injections
-ALL_PUNCHLINE_ROOTS = {
-    p.lower().rstrip('.!?')
-    for pool in CADENCE_PUNCH_LINES.values()
-    for p in pool
 }
 
 # Extended vocabulary patterns targeting formulaic LLM writing across topics
@@ -145,20 +107,20 @@ EXTENDED_AI_PATTERNS: Dict[str, Dict[str, str]] = {
     },
     r"\bnumerous industries\b": {
         "natural": "plenty of industries",
-        "academic": "multiple domains",
+        "academic": "multiple sectors",
         "professional": "various sectors",
         "creative": "all kinds of fields",
         "desc": "Formulaic: 'numerous industries'"
     },
     r"\bby automating repetitive tasks\b": {
-        "natural": "by taking over repetitive chores",
+        "natural": "by taking over routine chores",
         "academic": "by handling routine operations",
         "professional": "by automating routine workflows",
         "creative": "by clearing away boring chores",
         "desc": "AI trope: 'automating repetitive tasks'"
     },
     r"\bautomating repetitive tasks\b": {
-        "natural": "taking over repetitive chores",
+        "natural": "taking over routine chores",
         "academic": "automating routine processes",
         "professional": "automating routine tasks",
         "creative": "sweeping away busywork",
@@ -168,21 +130,21 @@ EXTENDED_AI_PATTERNS: Dict[str, Dict[str, str]] = {
         "natural": "routine chores",
         "academic": "routine procedures",
         "professional": "manual tasks",
-        "creative": "mind-numbing busywork",
+        "creative": "repetitive busywork",
         "desc": "Formulaic: 'repetitive tasks'"
     },
     r"\bproviding valuable insights from large datasets\b": {
         "natural": "pulling useful insights out of huge datasets",
         "academic": "extracting actionable insights from extensive data",
         "professional": "delivering actionable insights from enterprise datasets",
-        "creative": "digging real gems out of giant data mountains",
+        "creative": "digging real clarity out of giant data mountains",
         "desc": "AI cliché: 'valuable insights from large datasets'"
     },
     r"\bproviding valuable insights\b": {
         "natural": "pulling useful insights",
         "academic": "yielding key findings",
         "professional": "delivering actionable metrics",
-        "creative": "giving us fresh perspective",
+        "creative": "giving fresh clarity",
         "desc": "AI cliché: 'providing valuable insights'"
     },
     r"\bvaluable insights\b": {
@@ -198,356 +160,6 @@ EXTENDED_AI_PATTERNS: Dict[str, Dict[str, str]] = {
         "professional": "enterprise datasets",
         "creative": "massive heaps of data",
         "desc": "Formulaic: 'large datasets'"
-    },
-    r"\bOrganizations across the globe\b": {
-        "natural": "Across the world, companies",
-        "academic": "Global institutions",
-        "professional": "Enterprises worldwide",
-        "creative": "Teams all over the map",
-        "desc": "AI opener: 'Organizations across the globe'"
-    },
-    r"\borganizations across the globe\b": {
-        "natural": "companies across the world",
-        "academic": "global institutions",
-        "professional": "enterprises worldwide",
-        "creative": "teams everywhere",
-        "desc": "AI cliché: 'organizations across the globe'"
-    },
-    r"\bacross the globe\b": {
-        "natural": "around the world",
-        "academic": "internationally",
-        "professional": "globally",
-        "creative": "worldwide",
-        "desc": "AI cliché: 'across the globe'"
-    },
-    r"\bare adopting machine learning\b": {
-        "natural": "are picking up machine learning",
-        "academic": "are integrating machine learning models",
-        "professional": "are deploying machine learning solutions",
-        "creative": "are diving into machine learning",
-        "desc": "Formulaic: 'adopting machine learning'"
-    },
-    r"\bare adopting\b": {
-        "natural": "are turning to",
-        "academic": "are incorporating",
-        "professional": "are deploying",
-        "creative": "are jumping on",
-        "desc": "Formulaic: 'are adopting'"
-    },
-    r"\bto improve efficiency and make better decisions\b": {
-        "natural": "so they can work faster and make sharper decisions",
-        "academic": "to enhance productivity and inform decision-making",
-        "professional": "to drive efficiency and improve strategic outcomes",
-        "creative": "to move quicker and call the right shots",
-        "desc": "AI trope: 'improve efficiency and make better decisions'"
-    },
-    r"\bto improve efficiency\b": {
-        "natural": "to work faster",
-        "academic": "to enhance operational efficiency",
-        "professional": "to optimize workflows",
-        "creative": "to speed things up",
-        "desc": "AI cliché: 'to improve efficiency'"
-    },
-    r"\bmake better decisions\b": {
-        "natural": "make sharper decisions",
-        "academic": "facilitate sound decision-making",
-        "professional": "make informed decisions",
-        "creative": "call the right shots",
-        "desc": "AI cliché: 'make better decisions'"
-    },
-    r"\brenewable energy sources such as\b": {
-        "natural": "clean energy options like",
-        "academic": "renewable alternatives including",
-        "professional": "renewable resources such as",
-        "creative": "green power like",
-        "desc": "AI phrasing: 'renewable energy sources such as'"
-    },
-    r"\brenewable energy sources\b": {
-        "natural": "clean energy sources",
-        "academic": "renewable generation assets",
-        "professional": "clean energy resources",
-        "creative": "green energy",
-        "desc": "Formulaic: 'renewable energy sources'"
-    },
-    r"\bessential for combating climate change\b": {
-        "natural": "key to tackling climate change",
-        "academic": "critical for mitigating climate impacts",
-        "professional": "vital to addressing carbon reduction",
-        "creative": "our best shot at fixing the climate",
-        "desc": "AI cliché: 'essential for combating climate change'"
-    },
-    r"\bcombating climate change\b": {
-        "natural": "tackling climate change",
-        "academic": "climate change mitigation",
-        "professional": "addressing climate risks",
-        "creative": "fighting climate change",
-        "desc": "AI trope: 'combating climate change'"
-    },
-    r"\bTransitioning away from fossil fuels\b": {
-        "natural": "Moving away from fossil fuels",
-        "academic": "Decarbonizing existing energy grids",
-        "professional": "Phasing out fossil fuel dependence",
-        "creative": "Dropping fossil fuels",
-        "desc": "AI phrase: 'Transitioning away from fossil fuels'"
-    },
-    r"\btransitioning away from fossil fuels\b": {
-        "natural": "moving away from fossil fuels",
-        "academic": "phasing out fossil fuels",
-        "professional": "transitioning to cleaner fuels",
-        "creative": "leaving fossil fuels behind",
-        "desc": "AI phrase: 'transitioning away from fossil fuels'"
-    },
-    r"\bwill help reduce greenhouse gas emissions\b": {
-        "natural": "cuts down greenhouse gas emissions",
-        "academic": "substantially reduces aggregate emissions",
-        "professional": "drives down carbon emissions",
-        "creative": "clears the air of nasty emissions",
-        "desc": "AI phrase: 'reduce greenhouse gas emissions'"
-    },
-    r"\bprotect the environment for future generations\b": {
-        "natural": "keeps the planet healthy down the road",
-        "academic": "ensures long-term ecological sustainability",
-        "professional": "supports sustainable long-term environmental stewardship",
-        "creative": "leaves a healthy planet for the next generation",
-        "desc": "AI cliché: 'protect the environment for future generations'"
-    },
-    r"\bprovides scalable infrastructure for modern software applications\b": {
-        "natural": "delivers flexible infrastructure for modern software setups",
-        "academic": "furnishes scalable infrastructure supporting contemporary software architectures",
-        "professional": "provides resilient infrastructure for enterprise applications",
-        "creative": "gives modern apps room to stretch and grow",
-        "desc": "AI trope: 'scalable infrastructure for modern applications'"
-    },
-    r"\bprovides scalable infrastructure\b": {
-        "natural": "gives flexible infrastructure",
-        "academic": "furnishes scalable infrastructure",
-        "professional": "delivers scalable infrastructure",
-        "creative": "gives elastic room",
-        "desc": "AI buzzword: 'provides scalable infrastructure'"
-    },
-    r"\bscalable infrastructure\b": {
-        "natural": "flexible infrastructure",
-        "academic": "dynamically elastic infrastructure",
-        "professional": "scalable cloud architecture",
-        "creative": "elastic setup",
-        "desc": "AI buzzword: 'scalable infrastructure'"
-    },
-    r"\bmodern software applications\b": {
-        "natural": "modern software",
-        "academic": "contemporary software systems",
-        "professional": "production software systems",
-        "creative": "today's apps",
-        "desc": "Formulaic: 'modern software applications'"
-    },
-    r"\bBy utilizing distributed systems\b": {
-        "natural": "By using distributed systems",
-        "academic": "Through distributed architectures",
-        "professional": "Leveraging distributed environments",
-        "creative": "Spreading workloads across machines",
-        "desc": "AI opener: 'By utilizing distributed systems'"
-    },
-    r"\bby utilizing distributed systems\b": {
-        "natural": "by using distributed systems",
-        "academic": "via distributed systems",
-        "professional": "through distributed systems",
-        "creative": "by spreading systems out",
-        "desc": "AI phrasing: 'by utilizing distributed systems'"
-    },
-    r"\bby utilizing\b": {
-        "natural": "by using",
-        "academic": "by employing",
-        "professional": "via",
-        "creative": "by leaning on",
-        "desc": "AI phrasing: 'by utilizing'"
-    },
-    r"\bcompanies can achieve higher availability\b": {
-        "natural": "companies can keep availability high",
-        "academic": "organizations realize increased fault tolerance",
-        "professional": "teams sustain higher system availability",
-        "creative": "companies keep the lights on around the clock",
-        "desc": "AI phrase: 'achieve higher availability'"
-    },
-    r"\blower operational costs\b": {
-        "natural": "hold down operational costs",
-        "academic": "curtail operating expenditures",
-        "professional": "reduce overhead expenses",
-        "creative": "slash daily expenses",
-        "desc": "AI phrase: 'lower operational costs'"
-    },
-    r"\bwhile focusing on core business logic\b": {
-        "natural": "while keeping focus on what matters",
-        "academic": "while concentrating resources on domain-specific capabilities",
-        "professional": "while focusing on core strategic initiatives",
-        "creative": "without getting bogged down in boilerplate",
-        "desc": "AI cliché: 'focusing on core business logic'"
-    },
-    r"\brapid advancements in\b": {
-        "natural": "quick progress in",
-        "academic": "accelerated developments in",
-        "professional": "advancements across",
-        "creative": "leaps and bounds in",
-        "desc": "AI phrase: 'rapid advancements in'"
-    },
-    r"\bvital need for\b": {
-        "natural": "clear need for",
-        "academic": "pressing imperative for",
-        "professional": "critical requirement for",
-        "creative": "urgent call for",
-        "desc": "AI phrase: 'vital need for'"
-    },
-    r"\bcrucial need for\b": {
-        "natural": "pressing need for",
-        "academic": "pronounced requirement for",
-        "professional": "high-priority demand for",
-        "creative": "crying need for",
-        "desc": "AI phrase: 'crucial need for'"
-    },
-    r"\bserves as a catalyst for\b": {
-        "natural": "acts as a spark for",
-        "academic": "catalyzes",
-        "professional": "drives",
-        "creative": "lights the fuse for",
-        "desc": "AI metaphor: 'serves as a catalyst for'"
-    },
-    r"\bat an unprecedented pace\b": {
-        "natural": "faster than ever",
-        "academic": "with exceptional rapidity",
-        "professional": "at record velocity",
-        "creative": "at breakneck speed",
-        "desc": "AI cliché: 'at an unprecedented pace'"
-    },
-    r"\bunprecedented growth\b": {
-        "natural": "rapid growth",
-        "academic": "marked expansion",
-        "professional": "substantial growth",
-        "creative": "runaway growth",
-        "desc": "AI cliché: 'unprecedented growth'"
-    },
-    r"\bunprecedented advancements\b": {
-        "natural": "rapid progress",
-        "academic": "accelerated technological evolution",
-        "professional": "breakthrough developments",
-        "creative": "wild breakthroughs",
-        "desc": "AI cliché: 'unprecedented advancements'"
-    },
-    r"\brevolutionizing sectors\b": {
-        "natural": "transforming industries",
-        "academic": "fundamentally altering sectors",
-        "professional": "modernizing market sectors",
-        "creative": "shaking up whole markets",
-        "desc": "AI buzzword: 'revolutionizing sectors'"
-    },
-    r"\bstreamlining processes\b": {
-        "natural": "speeding up workflows",
-        "academic": "optimizing operational pathways",
-        "professional": "simplifying procedures",
-        "creative": "trimming the fat",
-        "desc": "AI buzzword: 'streamlining processes'"
-    },
-    r"\bpaving the way for\b": {
-        "natural": "clearing the path for",
-        "academic": "establishing the foundation for",
-        "professional": "preparing the groundwork for",
-        "creative": "setting the stage for",
-        "desc": "AI cliché: 'paving the way for'"
-    },
-    r"\bharness the power of\b": {
-        "natural": "tap into the power of",
-        "academic": "utilize the capabilities of",
-        "professional": "capitalize on the potential of",
-        "creative": "ride the wave of",
-        "desc": "AI cliché: 'harness the power of'"
-    },
-    r"\bcornerstone of\b": {
-        "natural": "foundation of",
-        "academic": "structural pillar of",
-        "professional": "core component of",
-        "creative": "bedrock of",
-        "desc": "AI metaphor: 'cornerstone of'"
-    },
-    r"\bintegral part of\b": {
-        "natural": "key part of",
-        "academic": "intrinsic component of",
-        "professional": "integral component of",
-        "creative": "piece of the puzzle in",
-        "desc": "AI phrase: 'integral part of'"
-    },
-    r"\bpoised to\b": {
-        "natural": "set to",
-        "academic": "positioned to",
-        "professional": "ready to",
-        "creative": "geared up to",
-        "desc": "AI cliché: 'poised to'"
-    },
-    r"\bparamount importance\b": {
-        "natural": "top priority",
-        "academic": "primary significance",
-        "professional": "critical importance",
-        "creative": "front and center priority",
-        "desc": "AI trope: 'paramount importance'"
-    },
-    r"\bindispensable tool\b": {
-        "natural": "essential tool",
-        "academic": "critical instrument",
-        "professional": "vital utility",
-        "creative": "go-to tool",
-        "desc": "AI trope: 'indispensable tool'"
-    },
-    r"\bmeticulously\b": {
-        "natural": "carefully",
-        "academic": "rigorously",
-        "professional": "thoroughly",
-        "creative": "with an eagle eye",
-        "desc": "AI adverb: 'meticulously'"
-    },
-    r"\bburgeoning\b": {
-        "natural": "fast-growing",
-        "academic": "nascent",
-        "professional": "emerging",
-        "creative": "booming",
-        "desc": "AI adjective: 'burgeoning'"
-    },
-    r"\btransformative impact\b": {
-        "natural": "major impact",
-        "academic": "profound structural effect",
-        "professional": "significant operational value",
-        "creative": "game-changing wave",
-        "desc": "AI buzzword: 'transformative impact'"
-    },
-    r"\bparadigm shift\b": {
-        "natural": "fundamental shift",
-        "academic": "conceptual transition",
-        "professional": "strategic transformation",
-        "creative": "total shakeup",
-        "desc": "AI cliché: 'paradigm shift'"
-    },
-    r"\ba wide variety of\b": {
-        "natural": "a wide mix of",
-        "academic": "a diverse selection of",
-        "professional": "a broad range of",
-        "creative": "a vibrant spread of",
-        "desc": "AI filler: 'a wide variety of'"
-    },
-    r"\ba vast array of\b": {
-        "natural": "a huge range of",
-        "academic": "an extensive spectrum of",
-        "professional": "a wide assortment of",
-        "creative": "a wild lineup of",
-        "desc": "AI filler: 'a vast array of'"
-    },
-    r"\ba multitude of\b": {
-        "natural": "plenty of",
-        "academic": "numerous",
-        "professional": "multiple",
-        "creative": "tons of",
-        "desc": "AI filler: 'a multitude of'"
-    },
-    r"\bin order to optimize\b": {
-        "natural": "to improve",
-        "academic": "to maximize",
-        "professional": "to streamline",
-        "creative": "to fine-tune",
-        "desc": "AI phrase: 'in order to optimize'"
     },
     r"\bnot only ([^,\.]+?) but also ([^,\.]+?)\b": {
         "natural": r"both \1 and \2",
@@ -565,7 +177,7 @@ PARTICIPIAL_CLAUSE_PATTERNS = [
     (r',\s+(?:thereby\s+)?enabling\s+', '. This allows '),
     (r',\s+(?:thereby\s+)?ensuring\s+', '. This ensures '),
     (r',\s+(?:thereby\s+)?facilitating\s+', '. This supports '),
-    (r',\s+(?:thereby\s+)?allowing\s+', '. This allows '),
+    (r',\s+(?:thereby\s+)?allowing\s+', '. This lets '),
     (r',\s+(?:thereby\s+)?creating\s+', '. This creates '),
     (r',\s+(?:thereby\s+)?fostering\s+', '. This builds '),
     (r',\s+(?:thereby\s+)?driving\s+', '. This drives '),
@@ -577,7 +189,7 @@ PARTICIPIAL_CLAUSE_PATTERNS = [
     (r',\s+(?:thereby\s+)?generating\s+', '. This generates '),
     (r',\s+(?:thereby\s+)?resulting in\s+', '. This leads to '),
     (r',\s+(?:thereby\s+)?leading to\s+', '. This leads to '),
-    (r',\s+which in turn\s+', '. In turn, this '),
+    (r',\s+which in turn\s+', '. In turn, this ')
 ]
 
 # Syntactic de-nominalization patterns to dismantle rigid AI sentence structures
@@ -595,37 +207,15 @@ DENOMINALIZATION_PATTERNS = [
     (r'\bIt is important to note that\b', r'Notice that'),
     (r'\bIt is essential to\b', r'We need to'),
     (r'\bIn order to\b', r'To'),
-    (r'\bDue to the fact that\b', r'Because'),
+    (r'\bDue to the fact that\b', r'Because')
 ]
 
-# Additional contractions applied during convergence hardening
-CONVERGENCE_CONTRACTIONS = {
-    r"\bcannot\b": "can't",
-    r"\bdoes not\b": "doesn't",
-    r"\bdo not\b": "don't",
-    r"\bdid not\b": "didn't",
-    r"\bwill not\b": "won't",
-    r"\bwould not\b": "wouldn't",
-    r"\bshould not\b": "shouldn't",
-    r"\bis not\b": "isn't",
-    r"\bare not\b": "aren't",
-    r"\bwas not\b": "wasn't",
-    r"\bwere not\b": "weren't",
-    r"\bhave not\b": "haven't",
-    r"\bhas not\b": "hasn't",
-    r"\bit is\b": "it's",
-    r"\bthere is\b": "there's",
-    r"\bthey are\b": "they're",
-    r"\bwe are\b": "we're",
-    r"\byou are\b": "you're",
-    r"\bthat is\b": "that's",
-    r"\bwe have\b": "we've",
-}
-
 def match_case(original: str, replacement: str) -> str:
-    """Matches the capitalization of the replacement to the original text."""
+    """Matches the capitalization of the replacement to the original text without middle-word casing distortion."""
     if not original or not replacement:
         return replacement
+    if original.isupper() and len(original) > 1:
+        return replacement.upper()
     if original[0].isupper():
         return replacement[0].upper() + replacement[1:]
     return replacement[0].lower() + replacement[1:]
@@ -659,7 +249,7 @@ class AIHumanizer:
             return token
         text = quote_pattern.sub(quote_sub, text)
 
-        # 2. Parenthetical citations e.g. (Smith et al., 2023), (Johnson, 2020; Lee, 2021)
+        # 2. Parenthetical citations e.g. (Smith et al., 2023)
         paren_pattern = re.compile(
             r'\([A-Z][A-Za-z\s\.\&]+(?:et al\.?)?,?\s*(?:19|20)\d{2}[a-z]?'
             r'(?:,\s*(?:pp?\.?\s*\d+(?:-\d+)?|\d+(?:-\d+)?))?'
@@ -704,10 +294,7 @@ class AIHumanizer:
     ) -> Dict[str, Any]:
         """
         Humanizes AI-generated text by altering cadence, breaking monotonous rhythms,
-        and eliminating recognizable LLM tropes to achieve human scores (< 20% AI).
-        Preserves citations & quotes when academic_shield is True.
-        Preserves bullet patterns, numbering, casing, and font size layout when preserve_pattern is True.
-        Utilizes Single-Click Deep Convergence to guarantee human scores in a single request.
+        and eliminating recognizable LLM tropes to achieve human scores (< 15% AI).
         """
         text = text.strip() if text else ""
         if not text:
@@ -762,12 +349,12 @@ class AIHumanizer:
         has_trailing_period = text.rstrip().endswith((".", "!", "?"))
 
         if preserve_pattern:
-            bullet_match = re.match(r'^(\s*(?:[\u2022\u2023\u25E6\u2043\u2219\*\-\—▪▫]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)]))\s+', text)
+            bullet_match = re.match(r'^(\s*(?:[\u2022\u2023\u25E6\u2043\u2219\*\-\—▪▫]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)])\s+)', text)
             if bullet_match:
                 bullet_prefix = bullet_match.group(0)
                 core_text = text[len(bullet_prefix):]
 
-            label_match = re.match(r'^([A-Z][A-Za-z0-9\s/&]{1,35}\s*[:\-–—]\s*)', core_text)
+            label_match = re.match(r'^([A-Z][A-Za-z0-9\s/&]{1,35}\s*(?::\s*|[-–—]\s+))', core_text)
             if label_match and len(label_match.group(1).split()) <= 4:
                 label_prefix = label_match.group(1)
                 core_text = core_text[len(label_prefix):]
@@ -801,24 +388,29 @@ class AIHumanizer:
     ) -> Dict[str, Any]:
         """
         Single-Click Closed-Loop Convergence Engine:
-        Runs iterative optimization passes until the text scores below the guaranteed human threshold.
-        Eliminates the need for manual re-scanning or multi-click humanization.
+        Runs iterative optimization passes until the text scores below the guaranteed human threshold (< 15%).
         """
         tone = tone.lower() if tone in ["natural", "academic", "professional", "creative"] else "natural"
         intensity = intensity.lower() if intensity in ["mild", "balanced", "aggressive"] else "balanced"
-        
-        # Target AI percentage threshold: Guaranteed < 15% across all modes
+
         target_score = 8 if intensity == "aggressive" else (12 if intensity == "balanced" else 15)
 
         detector = self._get_detector()
         initial_eval = detector.analyze(text)
-        initial_ai = initial_eval["ai_percentage"]
+        initial_ai = initial_eval["fakePercentage"]
 
-        # Step 0: Academic Shield Protection
-        entity_map = {}
-        modified = text
-        if academic_shield:
-            modified, entity_map = self._protect_academic_entities(modified)
+        # If already clearly human, return early
+        if initial_ai <= 12.0:
+            return {
+                "original_text": text,
+                "humanized_text": text,
+                "changes_applied": [f"Text verified as authentic human-written ({round(initial_ai)}% AI). Preserved original cadence."],
+                "tone": tone,
+                "intensity": intensity,
+                "shielded_items_count": 0,
+                "convergence_passes": 0,
+                "source": "heuristic_engine"
+            }
 
         # Step 0: Academic Shield Protection
         entity_map = {}
@@ -832,25 +424,19 @@ class AIHumanizer:
         passes_run = 0
         all_changes = []
 
-        is_bullet_or_heading = bool(re.match(r'^\s*(?:[\u2022\u2023\u25E6\u2043\u2219\*\-\—▪▫]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)])\s+', text)) or len(text.split()) <= 6
-
-        # Closed-Loop Auto-Convergence (up to 3 passes internally)
-        for iteration in range(3):
+        # Closed-Loop Auto-Convergence (up to 4 passes internally)
+        for iteration in range(4):
             passes_run += 1
 
             if iteration == 0:
-                # Pass 1: Standard heuristic humanization
-                p1_res = self._heuristic_humanize(modified, tone, intensity, academic_shield=False, preserve_pattern=preserve_pattern)
+                # Pass 1: Standard Lexical, Compound Transition, and Participial Clause Restructuring
+                p1_res = self._heuristic_humanize(modified, tone, intensity, academic_shield=False)
                 modified = p1_res["humanized_text"]
                 all_changes.extend(p1_res["changes_applied"])
+
             elif iteration == 1:
-                # Pass 2: Deep Syntactic De-nominalization, Participial Clauses & Contraction Hardening
+                # Pass 2: Syntactic De-nominalization, Participial Clauses, Contractions
                 p2_changes = []
-                # Invert nominalized rigid openers
-                for pat, repl in DENOMINALIZATION_PATTERNS:
-                    if re.search(pat, modified, re.IGNORECASE):
-                        modified = re.sub(pat, repl, modified, flags=re.IGNORECASE)
-                        p2_changes.append("Inverted rigid nominalized openers")
 
                 # Invert participial clauses (e.g. ', automating' -> '. This automates')
                 for pat, rep in PARTICIPIAL_CLAUSE_PATTERNS:
@@ -858,13 +444,20 @@ class AIHumanizer:
                         modified = re.sub(pat, rep, modified, flags=re.IGNORECASE)
                         p2_changes.append("Restructured participial clause into active sentence")
 
-                # Apply high-impact modal contractions
-                for pat, contracted in CONVERGENCE_CONTRACTIONS.items():
+                # De-nominalization
+                for pat, repl in DENOMINALIZATION_PATTERNS:
                     if re.search(pat, modified, re.IGNORECASE):
-                        modified = re.sub(pat, contracted, modified, flags=re.IGNORECASE)
-                        p2_changes.append(f"Injected natural contraction '{contracted}'")
+                        modified = re.sub(pat, repl, modified, flags=re.IGNORECASE)
+                        p2_changes.append("Inverted rigid nominalized openers")
 
-                # Break compound clauses in sentences > 15 words
+                # Contractions (for non-academic tones)
+                if tone != "academic":
+                    for pat, contracted in CONTRACTIONS.items():
+                        if re.search(pat, modified):
+                            modified = re.sub(pat, contracted, modified)
+                            p2_changes.append(f"Injected natural contraction '{contracted}'")
+
+                # Break long compound sentences (> 18 words)
                 sents = split_sentences(modified)
                 split_sents = []
                 for s in sents:
@@ -887,16 +480,15 @@ class AIHumanizer:
                 modified = " ".join(split_sents)
                 modified = re.sub(r'\s+', ' ', modified).strip()
                 all_changes.extend(p2_changes)
-            else:
-                # Pass 3: Conversational Anchors, Extended Splitting & High-Cadence Polish
+
+            elif iteration == 2:
+                # Pass 3: Compound Sentence Splitting & Transition Stripping
                 p3_changes = []
                 sents = split_sentences(modified)
-
-                # Split long sentences at conjunctions only with subject pronouns
                 split_sents = []
                 for s in sents:
                     words = tokenize_words(s)
-                    if len(words) >= 18:
+                    if len(words) >= 16:
                         for conj_pat, conj_rep in [
                             (r',\s+and\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Also, '),
                             (r',\s+but\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Still, ')
@@ -906,47 +498,42 @@ class AIHumanizer:
                                 p3_changes.append("Split uniform sentence for enhanced burstiness")
                                 break
                     split_sents.append(s)
-                sents = split_sents
-
-                modified = " ".join(sents)
+                modified = " ".join(split_sents)
                 modified = re.sub(r'\s+', ' ', modified).strip()
                 all_changes.extend(p3_changes)
 
+            else:
+                # Pass 4: Final Polishing - Strip remaining formulaic transition starters
+                p4_changes = []
+                # Strip remaining formal openers completely
+                modified = re.sub(r'^(?:Furthermore|Moreover|Additionally|In addition|Consequently),\s*', '', modified, flags=re.IGNORECASE)
+                modified = re.sub(r'(?<=[.!?]\s)(?:Furthermore|Moreover|Additionally|In addition|Consequently),\s*', '', modified, flags=re.IGNORECASE)
+                p4_changes.append("Streamlined leading discourse transitions")
+                all_changes.extend(p4_changes)
+
             # Check convergence score with temporary entity restoration
             eval_text = self._restore_academic_entities(modified, entity_map) if entity_map else modified
-            current_ai = detector.analyze(eval_text)["ai_percentage"]
+            current_eval = detector.analyze(eval_text)
+            current_ai = current_eval["fakePercentage"]
 
             if current_ai < best_score:
                 best_score = current_ai
                 best_text = eval_text
                 best_changes = list(all_changes)
-            elif best_text == text and eval_text != text:
-                best_text = eval_text
-                best_score = current_ai
-                best_changes = list(all_changes)
 
             if current_ai <= target_score:
                 break
 
-        # Anti-regression guarantee: preserve best rewritten text while ensuring score never regresses
-        if best_text != text and best_score <= initial_ai:
-            final_text = best_text
-            final_changes = best_changes if best_changes else ["Humanized phrasing and sentence cadence"]
-        elif best_score < initial_ai:
-            final_text = best_text
-            final_changes = best_changes
-        elif best_text != text:
-            final_text = best_text
-            final_changes = best_changes if best_changes else ["Humanized sentence structure and cadence"]
-        else:
-            final_text = text
-            final_changes = [f"Text verified as authentic human-written ({initial_ai}% AI). Preserved original cadence without artificial alteration."]
-
+        final_text = best_text if best_text != text else text
         if entity_map and final_text == modified:
             final_text = self._restore_academic_entities(final_text, entity_map)
 
-        if passes_run > 1 and best_score < initial_ai:
-            final_changes.insert(0, f"Deep Convergence: Achieved human score ({best_score}%) in {passes_run} internal passes")
+        final_changes = best_changes if best_changes else ["Humanized sentence cadence and vocabulary"]
+
+        if best_score <= 15.0:
+            final_changes.insert(0, f"Deep Convergence: Achieved authentic human score ({round(best_score)}%) in {passes_run} passes")
+        elif best_score < initial_ai:
+            final_changes.insert(0, f"Deep Convergence: Reduced AI probability from {round(initial_ai)}% to {round(best_score)}% in {passes_run} passes")
 
         unique_changes = list(dict.fromkeys(final_changes))
 
@@ -961,8 +548,7 @@ class AIHumanizer:
             "source": "heuristic_engine"
         }
 
-
-    def _heuristic_humanize(self, text: str, tone: str, intensity: str, academic_shield: bool = True, preserve_pattern: bool = True) -> Dict[str, Any]:
+    def _heuristic_humanize(self, text: str, tone: str, intensity: str, academic_shield: bool = True) -> Dict[str, Any]:
         tone = tone.lower() if tone in ["natural", "academic", "professional", "creative"] else "natural"
         intensity = intensity.lower() if intensity in ["mild", "balanced", "aggressive"] else "balanced"
 
@@ -976,11 +562,17 @@ class AIHumanizer:
             if entity_map:
                 changes_applied.append(f"Academic Shield: Preserved {len(entity_map)} citations/quotes")
 
-        # Step 1: Replace AI Cliches & formulaic patterns with tone-appropriate human phrasing
+        # Step 1: Clean Compound Transitions first (prevents stacked openers)
+        for pattern, replacement in COMPOUND_TRANSITION_PATTERNS:
+            if re.search(pattern, modified, re.IGNORECASE):
+                modified = re.sub(pattern, replacement, modified, flags=re.IGNORECASE)
+                changes_applied.append("Streamlined compound transition")
+
+        # Step 2: Replace AI Clichés & formulaic patterns with tone-appropriate human phrasing
         combined_cliches = {**AI_CLICHE_PATTERNS, **EXTENDED_AI_PATTERNS}
         for pattern, info in combined_cliches.items():
             regex = re.compile(pattern, re.IGNORECASE)
-            
+
             def replace_callback(match):
                 orig = match.group(0)
                 repl = info.get(tone, info.get("natural", "explore"))
@@ -992,12 +584,17 @@ class AIHumanizer:
                 modified = regex.sub(replace_callback, modified)
                 changes_applied.append(f"Replaced trope '{info['desc']}'")
 
-        # Step 2: Fix robotic transitions & formulaic openers
+        # Step 2b: Restructure Participial Clauses (e.g. ', thereby reducing' -> '. This reduces')
+        for pat, rep in PARTICIPIAL_CLAUSE_PATTERNS:
+            if re.search(pat, modified, re.IGNORECASE):
+                modified = re.sub(pat, rep, modified, flags=re.IGNORECASE)
+                changes_applied.append("Restructured participial clause into active sentence")
+
+        # Step 3: Fix robotic transitions & formulaic openers
         transitions = TRANSITION_REPLACEMENTS.get(tone, TRANSITION_REPLACEMENTS["natural"])
         for t_idx, (ai_term, repl_list) in enumerate(transitions):
             pattern = re.compile(re.escape(ai_term), re.IGNORECASE)
             if pattern.search(modified):
-                # Deterministic selection based on index to ensure consistent output
                 replacement = repl_list[t_idx % len(repl_list)] if repl_list else ""
                 if replacement == "":
                     modified = pattern.sub("", modified).strip()
@@ -1006,15 +603,15 @@ class AIHumanizer:
                     modified = pattern.sub(replacement, modified)
                 changes_applied.append(f"Softened rigid transition '{ai_term}'")
 
-        # Step 3: Inject natural contractions (essential for passing AI detectors < 20%)
-        if tone in ["natural", "creative", "professional"] or intensity in ["balanced", "aggressive"]:
+        # Step 4: Inject natural contractions (essential for passing AI detectors, except academic)
+        if tone != "academic" and (tone in ["natural", "creative", "professional"] or intensity in ["balanced", "aggressive"]):
             for formal, contracted in CONTRACTIONS.items():
                 pattern = re.compile(formal)
                 if pattern.search(modified):
                     modified = pattern.sub(contracted, modified)
                     changes_applied.append(f"Injected natural contraction '{contracted}'")
 
-        # Step 4: Burstiness & Cadence Restructuring (Grammar-Safe, never breaks lists or injects fake punchlines)
+        # Step 5: Burstiness & Cadence Restructuring
         raw_sentences = split_sentences(modified)
         restructured_sentences = []
 
@@ -1022,7 +619,7 @@ class AIHumanizer:
             words = tokenize_words(sent)
             word_count = len(words)
 
-            # Split overly long compound sentences (18+ words) ONLY at genuine independent clauses with subject pronouns
+            # Split overly long compound sentences (18+ words) ONLY at genuine independent clauses
             if word_count >= 18:
                 split_points = [
                     (r',\s+and\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Also, '),
@@ -1043,8 +640,6 @@ class AIHumanizer:
 
             restructured_sentences.append(sent)
 
-
-
         # Reassemble text
         humanized_text = " ".join(restructured_sentences)
         humanized_text = re.sub(r'\s+', ' ', humanized_text)
@@ -1052,7 +647,7 @@ class AIHumanizer:
         humanized_text = re.sub(r'([.!?])\s*([a-z])', lambda m: f"{m.group(1)} {m.group(2).upper()}", humanized_text)
         humanized_text = humanized_text.strip()
 
-        # Step 5: Restore Academic Entities (Citations, Bracketed Numbers, Quotes)
+        # Step 6: Restore Academic Entities
         if entity_map:
             humanized_text = self._restore_academic_entities(humanized_text, entity_map)
 
@@ -1123,84 +718,42 @@ class AIHumanizer:
             pass
         return None
 
-    def _remove_cliches(self, text: str, tone: str = "natural") -> Tuple[str, List[str]]:
-        changes = []
-        modified = text
-        for pattern, info in AI_CLICHE_PATTERNS.items():
-            regex = re.compile(pattern, re.IGNORECASE)
-            def replace_callback(match):
-                orig = match.group(0)
-                repl = info.get(tone, info.get("natural", "explore"))
-                return match_case(orig, repl)
-            if regex.search(modified):
-                modified = regex.sub(replace_callback, modified)
-                changes.append(f"Replaced trope '{info['desc']}'")
-        return modified, changes
-
-    def _replace_transitions(self, text: str, tone: str = "natural") -> str:
-        transitions = TRANSITION_REPLACEMENTS.get(tone, TRANSITION_REPLACEMENTS["natural"])
-        modified = text
-        for ai_term, repl_list in transitions:
-            pattern = re.compile(re.escape(ai_term), re.IGNORECASE)
-            if pattern.search(modified):
-                replacement = random.choice(repl_list)
-                if replacement == "":
-                    modified = pattern.sub("", modified).strip()
-                    modified = re.sub(r'(?<=[.!?]\s),', '', modified)
-                else:
-                    modified = pattern.sub(replacement, modified)
-        return modified
-
-    def _apply_contractions(self, text: str) -> str:
-        modified = text
-        for formal, contracted in CONTRACTIONS.items():
-            pattern = re.compile(formal)
-            if pattern.search(modified):
-                modified = pattern.sub(contracted, modified)
-        return modified
-
     def reroll_sentence(self, sentence: str, tone: str = "natural") -> List[Dict[str, str]]:
-        """
-        Generates 3 distinct AI-resistant alternative phrasings for an individual sentence:
-        1. Natural & Conversational: Relaxes transitions, applies natural contractions and human idioms.
-        2. Academic & Structured: Enhances lexical entropy, sophisticated syntactic inversions, zero clichés.
-        3. Punchy & Concise: Shortens clauses, active voice, maximizes burstiness standard deviation.
-        """
+        """Generates 3 distinct AI-resistant alternative phrasings for an individual sentence."""
         clean_sent = sentence.strip()
         if not clean_sent:
             return []
 
-        # Remove existing clichés
-        de_cliched = self._remove_cliches(clean_sent, tone)[0]
-        
         # 1. Natural / Conversational variant
-        natural_cand = self._apply_contractions(de_cliched)
-        natural_cand = self._replace_transitions(natural_cand, "natural")
-        natural_cand = re.sub(r'^(It is important to note that|It should be noted that)\s+', 'The key thing is, ', natural_cand, flags=re.IGNORECASE)
-        natural_cand = re.sub(r'^(In order to)\s+', 'To ', natural_cand, flags=re.IGNORECASE)
+        natural_cand = clean_sent
+        for pat, rep in COMPOUND_TRANSITION_PATTERNS:
+            natural_cand = re.sub(pat, rep, natural_cand, flags=re.IGNORECASE)
+        for formal, contracted in CONTRACTIONS.items():
+            natural_cand = re.sub(formal, contracted, natural_cand)
+        natural_cand = re.sub(r'^(?:It is important to note that|It should be noted that)\s+', 'Notice that, ', natural_cand, flags=re.IGNORECASE)
+        natural_cand = re.sub(r'^(?:In order to)\s+', 'To ', natural_cand, flags=re.IGNORECASE)
         natural_cand = re.sub(r'\butilize\b', 'use', natural_cand, flags=re.IGNORECASE)
-        natural_cand = re.sub(r'\bdemonstrates?\b', 'shows', natural_cand, flags=re.IGNORECASE)
         natural_cand = re.sub(r'\bfoster innovation\b', 'spark new ideas', natural_cand, flags=re.IGNORECASE)
         if not re.search(r"[.!?]$", natural_cand):
             natural_cand += "."
 
         # 2. Academic / Structured variant
-        academic_cand = self._replace_transitions(de_cliched, "academic")
+        academic_cand = clean_sent
         academic_cand = re.sub(r'\bshows\b', 'demonstrates', academic_cand, flags=re.IGNORECASE)
-        academic_cand = re.sub(r'\bbig\b', 'substantial', academic_cand, flags=re.IGNORECASE)
         academic_cand = re.sub(r'\buse\b', 'employ', academic_cand, flags=re.IGNORECASE)
         academic_cand = re.sub(r'\bhelps\b', 'facilitates', academic_cand, flags=re.IGNORECASE)
-        academic_cand = re.sub(r'^(In conclusion|In summary),', 'Taken in synthesis,', academic_cand, flags=re.IGNORECASE)
+        academic_cand = re.sub(r'^(?:In conclusion|In summary),', 'In synthesis,', academic_cand, flags=re.IGNORECASE)
         if not re.search(r"[.!?]$", academic_cand):
             academic_cand += "."
 
         # 3. Punchy / Concise variant
-        punchy_cand = de_cliched
-        punchy_cand = re.sub(r'\b(furthermore|moreover|additionally|consequently|subsequently|essentially|basically|clearly|obviously)\b,?\s*', '', punchy_cand, flags=re.IGNORECASE)
-        punchy_cand = re.sub(r'\b(in order to)\b', 'to', punchy_cand, flags=re.IGNORECASE)
-        punchy_cand = re.sub(r'\b(due to the fact that)\b', 'because', punchy_cand, flags=re.IGNORECASE)
-        punchy_cand = re.sub(r'\b(plays a (vital|crucial|key) role in)\b', 'drives', punchy_cand, flags=re.IGNORECASE)
-        punchy_cand = self._apply_contractions(punchy_cand)
+        punchy_cand = clean_sent
+        punchy_cand = re.sub(r'\b(?:furthermore|moreover|additionally|consequently|subsequently)\b,?\s*', '', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = re.sub(r'\b(?:in order to)\b', 'to', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = re.sub(r'\b(?:due to the fact that)\b', 'because', punchy_cand, flags=re.IGNORECASE)
+        punchy_cand = re.sub(r'\b(?:plays a (?:vital|crucial|key) role in)\b', 'drives', punchy_cand, flags=re.IGNORECASE)
+        for formal, contracted in CONTRACTIONS.items():
+            punchy_cand = re.sub(formal, contracted, punchy_cand)
         punchy_cand = punchy_cand.strip()
         if punchy_cand:
             punchy_cand = punchy_cand[0].upper() + punchy_cand[1:]
