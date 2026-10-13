@@ -556,17 +556,6 @@ def humanize_pdf_in_place(
     orig_eval = detector.analyze(full_orig_text)
     orig_ai = orig_eval["ai_percentage"]
 
-    if orig_ai <= 8:
-        doc.close()
-        return {
-            "pdf_bytes": file_bytes,
-            "humanized_text": full_orig_text,
-            "paragraphs": all_original_paragraphs,
-            "changes_applied": [f"PDF already verified as authentic human prose ({orig_ai}% AI). Preserved all images, slide layouts, and headings untouched."],
-            "shielded_items_count": 0,
-            "page_count": page_count
-        }
-
     total_changes = []
     total_shielded = 0
     all_humanized_paragraphs = []

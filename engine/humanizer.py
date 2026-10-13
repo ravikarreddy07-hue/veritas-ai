@@ -167,6 +167,76 @@ EXTENDED_AI_PATTERNS: Dict[str, Dict[str, str]] = {
         "professional": r"\1 alongside \2",
         "creative": r"not just \1, but \2 too",
         "desc": "Formulaic structure: 'not only ... but also'"
+    },
+    r"\bserv(?:es|ed)? as a catalyst for\b": {
+        "natural": "drives",
+        "academic": "serves as a primary driver of",
+        "professional": "sparks",
+        "creative": "kicks off",
+        "desc": "AI trope: 'serves as a catalyst for'"
+    },
+    r"\bserve as a catalyst for\b": {
+        "natural": "drive",
+        "academic": "serve as primary drivers of",
+        "professional": "spark",
+        "creative": "kick off",
+        "desc": "AI trope: 'serve as a catalyst for'"
+    },
+    r"\bhas revolutionized\b": {
+        "natural": "has reshaped",
+        "academic": "has transformed",
+        "professional": "has modernized",
+        "creative": "has upended",
+        "desc": "AI buzzword: 'has revolutionized'"
+    },
+    r"\bhave revolutionized\b": {
+        "natural": "have reshaped",
+        "academic": "have transformed",
+        "professional": "have modernized",
+        "creative": "have upended",
+        "desc": "AI buzzword: 'have revolutionized'"
+    },
+    r"\brevolutionized\b": {
+        "natural": "reshaped",
+        "academic": "transformed",
+        "professional": "modernized",
+        "creative": "upended",
+        "desc": "AI buzzword: 'revolutionized'"
+    },
+    r"\bdecision makers\b": {
+        "natural": "leaders",
+        "academic": "institutional leadership",
+        "professional": "decision-makers",
+        "creative": "folks in charge",
+        "desc": "AI buzzword: 'decision makers'"
+    },
+    r"\bstrategic insights\b": {
+        "natural": "clear guidance",
+        "academic": "strategic analysis",
+        "professional": "key insights",
+        "creative": "sharp reads",
+        "desc": "Formulaic: 'strategic insights'"
+    },
+    r"\bwith efficiency and precision\b": {
+        "natural": "quickly and accurately",
+        "academic": "with high precision",
+        "professional": "efficiently",
+        "creative": "clean and fast",
+        "desc": "AI cliché: 'with efficiency and precision'"
+    },
+    r"\bsustainable innovation\b": {
+        "natural": "lasting innovation",
+        "academic": "long-term innovation",
+        "professional": "scalable innovation",
+        "creative": "fresh progress that sticks",
+        "desc": "Formulaic: 'sustainable innovation'"
+    },
+    r"\bautomated data processing\b": {
+        "natural": "automated data workflows",
+        "academic": "computational data processing",
+        "professional": "data automation",
+        "creative": "smart automation",
+        "desc": "Formulaic: 'automated data processing'"
     }
 }
 
@@ -194,16 +264,16 @@ PARTICIPIAL_CLAUSE_PATTERNS = [
 
 # Syntactic de-nominalization patterns to dismantle rigid AI sentence structures
 DENOMINALIZATION_PATTERNS = [
-    (r'\bThe development of ([^,\.]+?) (represents|enables|drives|creates)\b', r'Developing \1 \2'),
-    (r'\bThe proliferation of ([^,\.]+?) (requires|demands|calls for)\b', r'The rapid spread of \1 \2'),
-    (r'\bThe acceleration of ([^,\.]+?) (enables|allows|helps)\b', r'Accelerating \1 \2'),
-    (r'\bThe optimization of ([^,\.]+?) (minimizes|reduces|improves)\b', r'Optimizing \1 \2'),
+    (r'\bThe development of ([^,\.]+?) (represents|enables|drives|creates|sparks|fuels)\b', r'Developing \1 \2'),
+    (r'\bThe proliferation of ([^,\.]+?) (requires|demands|calls for|creates)\b', r'The rapid spread of \1 \2'),
+    (r'\bThe acceleration of ([^,\.]+?) (enables|allows|helps|drives)\b', r'Accelerating \1 \2'),
+    (r'\bThe optimization of ([^,\.]+?) (minimizes|reduces|improves|boosts)\b', r'Optimizing \1 \2'),
     (r'\bThe governance of ([^,\.]+?) (protects|secures|safeguards)\b', r'Safeguarding \1 \2'),
-    (r'\bThe implementation of ([^,\.]+?) (has|is|enables|allows|serves)\b', r'Implementing \1 \2'),
-    (r'\bThe integration of ([^,\.]+?) (allows|enables|provides)\b', r'Integrating \1 \2'),
-    (r'\bThe adoption of ([^,\.]+?) (drives|enables|leads)\b', r'Adopting \1 \2'),
-    (r'\bThe utilization of ([^,\.]+?) (improves|enhances)\b', r'Using \1 \2'),
-    (r'\bThe advancement of ([^,\.]+?) (creates|presents|accelerates)\b', r'Advancing \1 \2'),
+    (r'\bThe implementation of ([^,\.]+?) (has|is|enables|allows|serves|drives)\b', r'Implementing \1 \2'),
+    (r'\bThe integration of ([^,\.]+?) (allows|enables|provides|drives|sparks|fuels|creates|helps)\b', r'Integrating \1 \2'),
+    (r'\bThe adoption of ([^,\.]+?) (drives|enables|leads|sparks|fuels)\b', r'Adopting \1 \2'),
+    (r'\bThe utilization of ([^,\.]+?) (improves|enhances|boosts)\b', r'Using \1 \2'),
+    (r'\bThe advancement of ([^,\.]+?) (creates|presents|accelerates|drives)\b', r'Advancing \1 \2'),
     (r'\bIt is important to note that\b', r'Notice that'),
     (r'\bIt is essential to\b', r'We need to'),
     (r'\bIn order to\b', r'To'),
@@ -399,27 +469,14 @@ class AIHumanizer:
         initial_eval = detector.analyze(text)
         initial_ai = initial_eval["fakePercentage"]
 
-        # If already clearly human, return early
-        if initial_ai <= 12.0:
-            return {
-                "original_text": text,
-                "humanized_text": text,
-                "changes_applied": [f"Text verified as authentic human-written ({round(initial_ai)}% AI). Preserved original cadence."],
-                "tone": tone,
-                "intensity": intensity,
-                "shielded_items_count": 0,
-                "convergence_passes": 0,
-                "source": "heuristic_engine"
-            }
-
         # Step 0: Academic Shield Protection
         entity_map = {}
         modified = text
         if academic_shield:
             modified, entity_map = self._protect_academic_entities(modified)
 
-        best_text = text
-        best_score = initial_ai
+        best_text = None
+        best_score = float('inf')
         best_changes = []
         passes_run = 0
         all_changes = []
@@ -488,11 +545,15 @@ class AIHumanizer:
                 split_sents = []
                 for s in sents:
                     words = tokenize_words(s)
-                    if len(words) >= 16:
-                        for conj_pat, conj_rep in [
+                    if len(words) >= 14:
+                        clause_break_patterns = [
                             (r',\s+and\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Also, '),
-                            (r',\s+but\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Still, ')
-                        ]:
+                            (r',\s+but\s+(?=(?:it|they|this|these|we|he|she)\b)', '. Still, '),
+                            (r'\s+that allow(?:s)?\s+(?:users|organizations|teams|businesses|people|leaders)\s+to\b', '. This helps teams '),
+                            (r'\s+that enable(?:s)?\s+(?:users|organizations|teams|businesses|people|leaders)\s+to\b', '. This lets teams '),
+                            (r',\s+which\s+(?:helps|allows|enables|supports)\b', '. This helps '),
+                        ]
+                        for conj_pat, conj_rep in clause_break_patterns:
                             if re.search(conj_pat, s, re.IGNORECASE):
                                 s = re.sub(conj_pat, conj_rep, s, count=1)
                                 p3_changes.append("Split uniform sentence for enhanced burstiness")
@@ -503,12 +564,28 @@ class AIHumanizer:
                 all_changes.extend(p3_changes)
 
             else:
-                # Pass 4: Final Polishing - Strip remaining formulaic transition starters
+                # Pass 4: Final Polishing - Strip remaining formulaic transitions and inject natural rhythm
                 p4_changes = []
                 # Strip remaining formal openers completely
-                modified = re.sub(r'^(?:Furthermore|Moreover|Additionally|In addition|Consequently),\s*', '', modified, flags=re.IGNORECASE)
-                modified = re.sub(r'(?<=[.!?]\s)(?:Furthermore|Moreover|Additionally|In addition|Consequently),\s*', '', modified, flags=re.IGNORECASE)
+                modified = re.sub(r'^(?:Furthermore|Moreover|Additionally|In addition|Consequently|Also|In the end),\s*', '', modified, flags=re.IGNORECASE)
+                modified = re.sub(r'(?<=[.!?]\s)(?:Furthermore|Moreover|Additionally|In addition|Consequently|Also|In the end),\s*', '', modified, flags=re.IGNORECASE)
                 p4_changes.append("Streamlined leading discourse transitions")
+
+                if tone != "academic":
+                    for formal_pat, contracted in [
+                        (r'\bit is\b', "it's"),
+                        (r'\bthere is\b', "there's"),
+                        (r'\bthey are\b', "they're"),
+                        (r'\bwe are\b', "we're"),
+                        (r'\bdo not\b', "don't"),
+                        (r'\bcannot\b', "can't"),
+                        (r'\bdoes not\b', "doesn't"),
+                        (r'\bthat is\b', "that's")
+                    ]:
+                        if re.search(formal_pat, modified, re.IGNORECASE):
+                            modified = re.sub(formal_pat, contracted, modified, flags=re.IGNORECASE)
+                            p4_changes.append(f"Injected natural contraction '{contracted}'")
+
                 all_changes.extend(p4_changes)
 
             # Check convergence score with temporary entity restoration
@@ -516,7 +593,7 @@ class AIHumanizer:
             current_eval = detector.analyze(eval_text)
             current_ai = current_eval["fakePercentage"]
 
-            if current_ai < best_score:
+            if best_text is None or current_ai <= best_score:
                 best_score = current_ai
                 best_text = eval_text
                 best_changes = list(all_changes)
@@ -524,7 +601,9 @@ class AIHumanizer:
             if current_ai <= target_score:
                 break
 
-        final_text = best_text if best_text != text else text
+        final_text = best_text if (best_text and best_text != text) else (modified if modified != text else text)
+        if final_text:
+            final_text = re.sub(r'(^|[.!?]\s+)([a-z])', lambda m: m.group(1) + m.group(2).upper(), final_text)
         if entity_map and final_text == modified:
             final_text = self._restore_academic_entities(final_text, entity_map)
 

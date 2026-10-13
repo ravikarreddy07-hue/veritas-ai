@@ -67,6 +67,17 @@ class AIDetector:
         sent_lens = [len(w) for w in doc_words]
         mean_len = statistics.mean(sent_lens) if sent_lens else 0.0
 
+        CONTRACTION_REGEX = re.compile(
+            r"\b(?:can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|wouldn't|couldn't|shouldn't|it's|that's|what's|there's|here's|i'm|you're|he's|she's|we're|they're|i've|you've|we've|they've|i'll|you'll|he'll|she'll|we'll|they'll|i'd|you'd|he'd|she'd|we'd|they'd)\b",
+            re.IGNORECASE
+        )
+        AI_TRANSITIONS = (
+            "furthermore,", "moreover,", "additionally,", "in addition,",
+            "consequently,", "subsequently,", "similarly,", "importantly,",
+            "notably,", "specifically,", "ultimately,", "hence,", "thus,",
+            "therefore,"
+        )
+
         for idx, sent in enumerate(sentences):
             words = doc_words[idx]
             w_count = len(words)
@@ -74,8 +85,16 @@ class AIDetector:
                 probabilities.append(0.04)
                 continue
 
-            # Calibrated baseline logit for clean English (prior ~14% AI)
-            logit = -1.80
+            # Calibrated baseline logit with document-level burstiness modulation
+            logit = -0.20
+            if burstiness_val < 0.22:
+                logit += 0.45
+            elif burstiness_val < 0.30:
+                logit += 0.25
+            elif burstiness_val >= 0.52:
+                logit -= 0.75
+            elif burstiness_val >= 0.40:
+                logit -= 0.45
 
             # 1. AI Cliché and Buzzword Pattern Count
             cliches_in_sent = 0
@@ -83,52 +102,55 @@ class AIDetector:
                 if regex.search(sent):
                     cliches_in_sent += 1
             if cliches_in_sent > 0:
-                logit += 1.80 * min(3, cliches_in_sent)
+                logit += 1.60 * min(3, cliches_in_sent)
 
             # 2. Formulaic LLM Openers
             s_lower = sent.lower().strip()
             for op in AI_FAVORED_OPENERS:
                 if s_lower.startswith(op):
-                    logit += 1.40
+                    logit += 1.35
                     break
 
+            # 2b. Formal LLM Conjunctive Adverbs / Connectives
+            if any(s_lower.startswith(t) for t in AI_TRANSITIONS):
+                logit += 1.25
+
             # 3. Authentic Human Voice Signals (Subtractive weights)
-            contractions_count = sum(1 for c in ["'", "’"] if c in sent)
+            contractions_count = len(CONTRACTION_REGEX.findall(sent))
             first_person_matches = len(FIRST_PERSON_REGEX.findall(sent))
             conversational_matches = len(CONVERSATIONAL_REGEX.findall(sent))
 
             if contractions_count > 0:
-                logit -= 1.30 * min(2, contractions_count)
+                logit -= 0.55 * min(2, contractions_count)
 
             if first_person_matches > 0:
-                logit -= 1.10
+                logit -= 0.75
 
             if conversational_matches > 0:
-                logit -= 0.85
+                logit -= 0.70
 
-            if w_count <= 8:
-                logit -= 1.10
+            if w_count <= 7:
+                logit -= 0.70
 
             if any(p in sent for p in ["!", "—", "--", "?"]):
-                logit -= 0.60
+                logit -= 0.45
 
             # 4. Bureaucratic Syntax (Passive Voice & Latinate Nominalizations)
-            # Only penalize if not counterbalanced by authentic personal voice
             is_personal = (first_person_matches > 0 or contractions_count > 0 or conversational_matches > 0)
             if not is_personal:
                 if has_passive_voice(sent):
-                    logit += 0.55
+                    logit += 0.45
 
                 n_noms = count_nominalizations(sent)
                 if n_noms >= 2:
-                    logit += 0.50
+                    logit += 0.55
                 elif n_noms == 1:
                     logit += 0.25
 
-                # Robotic sentence length clustering (15-25 words with low doc variance)
-                if burstiness_val < 0.24 and 15 <= w_count <= 26:
+                # Robotic sentence length clustering (14-28 words with low doc variance)
+                if burstiness_val < 0.30 and 14 <= w_count <= 28:
                     if abs(w_count - mean_len) <= 4:
-                        logit += 0.40
+                        logit += 0.45
 
             # Map logit through sigmoid
             p = 1.0 / (1.0 + math.exp(-logit))
@@ -232,24 +254,40 @@ class AIDetector:
                     reasons.append(f"Formulaic opener '{op}'")
                     break
 
+            AI_TRANSITIONS_TUPLE = (
+                "furthermore,", "moreover,", "additionally,", "in addition,",
+                "consequently,", "subsequently,", "similarly,", "importantly,",
+                "notably,", "specifically,", "ultimately,", "hence,", "thus,",
+                "therefore,"
+            )
+            for tr in AI_TRANSITIONS_TUPLE:
+                if s_lower.startswith(tr):
+                    reasons.append(f"Formulaic transition '{tr[:-1]}'")
+                    break
+
             if has_passive_voice(sent):
                 reasons.append("Passive voice construction")
             if count_nominalizations(sent) >= 2:
                 reasons.append("Dense abstract nominalization")
             if FIRST_PERSON_REGEX.search(sent):
                 reasons.append("First-person personal voice")
-            if any(c in sent for c in ["'", "’"]):
+
+            CONTRACTION_CHECK = re.compile(
+                r"\b(?:can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|wouldn't|couldn't|shouldn't|it's|that's|what's|there's|here's|i'm|you're|he's|she's|we're|they're|i've|you've|we've|they've|i'll|you'll|he'll|she'll|we'll|they'll|i'd|you'd|he'd|she'd|we'd|they'd)\b",
+                re.IGNORECASE
+            )
+            if CONTRACTION_CHECK.search(sent):
                 reasons.append("Natural contraction")
-            if word_count <= 8:
+            if word_count <= 7:
                 reasons.append("Punchy human sentence")
 
             sentence_scores.append(final_s_score)
 
             # Sentence Classification Thresholds:
-            # Red (>= 55%): AI / GPT Generated
-            # Yellow (35% - 54%): Mixed / partial AI
+            # Red (>= 60%): AI / GPT Generated
+            # Yellow (35% - 59%): Mixed / partial AI
             # Green (< 35%): Likely Human
-            if final_s_score >= 55.0:
+            if final_s_score >= 60.0:
                 classification = "Likely AI"
                 color_class = "bg-red-500/20 border-red-500/50 text-red-200"
                 highlight_color = "red"
@@ -292,32 +330,16 @@ class AIDetector:
             if total_words > 0 else 0.0
         )
 
-        # Document burstiness modulation:
-        if burstiness_val >= 0.45:
-            burstiness_factor = 0.75
-        elif burstiness_val >= 0.35:
-            burstiness_factor = 0.88
-        elif burstiness_val < 0.20:
-            burstiness_factor = 1.15
-        else:
-            burstiness_factor = 1.0
+        final_score = weighted_avg_score
 
-        base_doc_score = weighted_avg_score * burstiness_factor
-
-        # Cliché density modulation (smooth continuous scaling without cliff jumps):
+        # Cliché density modulation:
         if total_cliches_found > 0:
             cliche_density = (total_cliches_found * 100.0) / max(25, total_words)
-            cliche_boost = min(40.0, total_cliches_found * 10.0 + cliche_density * 4.0)
-            final_score = base_doc_score + cliche_boost
-        else:
-            final_score = base_doc_score
-
-        # If all sentences are clearly human (< 35%) and zero clichés exist:
-        if total_cliches_found == 0 and all(s["classification"] == "Likely Human" for s in analyzed_sentences):
-            final_score = min(final_score, 14.0)
+            cliche_boost = min(30.0, total_cliches_found * 7.0 + cliche_density * 3.0)
+            final_score += cliche_boost
 
         # If majority of words are in Likely AI sentences:
-        if ai_words > (total_words * 0.5):
+        if ai_words > (total_words * 0.60):
             final_score = max(final_score, 65.0)
 
         fake_percentage = round(max(2.0, min(100.0, final_score)), 1)
